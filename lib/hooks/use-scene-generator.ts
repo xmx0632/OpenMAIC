@@ -774,11 +774,15 @@ export function useSceneGenerator(options: UseSceneGeneratorOptions = {}) {
           }
 
           if (!contentResult.success || !contentResult.content) {
+            // Record the failure before the abort/epoch bail-out: the failure
+            // result is already in hand, and skipping this leaves the outline
+            // suspended in generatingOutlines with no failed marker — the UI
+            // then shows "generating, please wait" forever with no retry.
+            store.getState().addFailedOutline(outline);
             if (abortRef.current || store.getState().generationEpoch !== startEpoch) {
               pausedByFailureOrAbort = true;
               break;
             }
-            store.getState().addFailedOutline(outline);
             options.onSceneFailed?.(outline, contentResult.error || 'Content generation failed');
             if (contentPromises) {
               // Parallel: surface the failure but keep going with the other scenes
@@ -834,11 +838,13 @@ export function useSceneGenerator(options: UseSceneGeneratorOptions = {}) {
                 signal,
               );
               if (!ttsResult.success) {
+                // Same as the content branch: record before the abort/epoch
+                // bail-out so the outline never hangs in "generating" limbo.
+                store.getState().addFailedOutline(outline);
                 if (abortRef.current || store.getState().generationEpoch !== startEpoch) {
                   pausedByFailureOrAbort = true;
                   break;
                 }
-                store.getState().addFailedOutline(outline);
                 options.onSceneFailed?.(outline, ttsResult.error || 'TTS generation failed');
                 store.getState().setGenerationStatus('paused');
                 pausedByFailureOrAbort = true;
@@ -854,15 +860,21 @@ export function useSceneGenerator(options: UseSceneGeneratorOptions = {}) {
             }
 
             removeGeneratingOutline(outline.id);
+            // A stale failure marker (e.g. recorded before an earlier abort,
+            // or left by a failed pass that a later resume just recovered)
+            // would keep the deck's exports locked despite this success.
+            store.getState().clearFailedOutline(outline.id);
             useStageStore.getState().addScene(scene);
             options.onSceneGenerated?.(scene, outline.order);
             previousSpeeches = actionsResult.previousSpeeches || [];
           } else {
+            // Same as the content branch: record before the abort/epoch
+            // bail-out so the outline never hangs in "generating" limbo.
+            store.getState().addFailedOutline(outline);
             if (abortRef.current || store.getState().generationEpoch !== startEpoch) {
               pausedByFailureOrAbort = true;
               break;
             }
-            store.getState().addFailedOutline(outline);
             options.onSceneFailed?.(outline, actionsResult.error || 'Actions generation failed');
             store.getState().setGenerationStatus('paused');
             pausedByFailureOrAbort = true;
@@ -942,7 +954,7 @@ export function useSceneGenerator(options: UseSceneGeneratorOptions = {}) {
       };
 
       // Remove from failed list and mark as generating
-      store.getState().retryFailedOutline(outlineId);
+      store.getState().clearFailedOutline(outlineId);
       store.getState().setGenerationStatus('generating');
       const currentGenerating = store.getState().generatingOutlines;
       if (!currentGenerating.some((o) => o.id === outline.id)) {
@@ -1040,10 +1052,12 @@ export function useSceneGenerator(options: UseSceneGeneratorOptions = {}) {
           // the orphaned outline as pending and regenerate it.
           store.getState().markGenerationCompleteIfDone();
         }
-      } catch (err) {
-        if (!isAbortError(err)) {
-          store.getState().addFailedOutline(outline);
-        }
+      } catch {
+        // The retry already moved this outline out of failedOutlines, so any
+        // exit here — an abort included — must put it back. Otherwise it sits
+        // in generatingOutlines with neither a scene nor a failed marker, and
+        // the UI offers no way out of "generating, please wait".
+        store.getState().addFailedOutline(outline);
       }
     },
     [store],

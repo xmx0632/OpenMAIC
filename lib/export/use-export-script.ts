@@ -15,7 +15,6 @@ import { saveAs } from 'file-saver';
 import { toast } from 'sonner';
 
 import { useStageStore } from '@/lib/store';
-import { useMediaGenerationStore } from '@/lib/store/media-generation';
 import { useI18n } from '@/lib/hooks/use-i18n';
 import { createLogger } from '@/lib/logger';
 import type { Scene } from '@/lib/types/stage';
@@ -47,7 +46,11 @@ interface ScriptExportMediaTask {
   status: string;
 }
 
-/** Keep render-time and click-time narration export readiness in sync. */
+/**
+ * Full-generation gate for media-carrying exports (PPTX, resource pack,
+ * classroom zip, video): every outline settled and every media task terminal.
+ * Kept in one place so render-time and click-time checks stay in sync.
+ */
 export function isScriptExportReady(
   stageState: ScriptExportStageState,
   mediaTasks: Record<string, ScriptExportMediaTask>,
@@ -58,6 +61,16 @@ export function isScriptExportReady(
     stageState.failedOutlines.length === 0 &&
     Object.values(mediaTasks).every((task) => task.status === 'done' || task.status === 'failed')
   );
+}
+
+/**
+ * Text-only gate for the script downloads (.md / .docx): narration is
+ * collected from already-materialized scenes, so any scene is enough — a
+ * pending media task or a failed/remaining outline must not lock the
+ * text export.
+ */
+export function isScriptTextExportReady(stageState: { scenes: readonly unknown[] }): boolean {
+  return stageState.scenes.length > 0;
 }
 
 /**
@@ -202,8 +215,9 @@ export function useExportScript() {
       if (exportingRef.current) return;
 
       const stageState = useStageStore.getState();
-      const mediaTasks = useMediaGenerationStore.getState().tasks;
-      if (!isScriptExportReady(stageState, mediaTasks)) {
+      // Text-only export: scenes are the only prerequisite. Media/outline
+      // state gates the media-carrying exports, not this one.
+      if (!isScriptTextExportReady(stageState)) {
         toast.warning(t('share.notReady'));
         return;
       }

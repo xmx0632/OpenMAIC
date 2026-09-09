@@ -368,7 +368,7 @@ interface StageState {
   bumpGenerationEpoch: () => void;
   addFailedOutline: (outline: SceneOutline) => void;
   clearFailedOutlines: () => void;
-  retryFailedOutline: (outlineId: string) => void;
+  clearFailedOutline: (outlineId: string) => void;
 
   // Getters
   getCurrentScene: () => Scene | null;
@@ -799,7 +799,10 @@ const useStageStoreBase = create<StageState>()((set, get) => ({
 
   clearFailedOutlines: () => set({ failedOutlines: [] }),
 
-  retryFailedOutline: (outlineId) => {
+  // Drop one outline's failure marker. Called both when a retry starts and
+  // when the outline's scene materializes through a later resume pass, so a
+  // stale marker can never keep the deck (and its exports) locked.
+  clearFailedOutline: (outlineId) => {
     set({
       failedOutlines: get().failedOutlines.filter((o) => o.id !== outlineId),
     });

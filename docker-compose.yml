@@ -53,6 +53,12 @@ services:
       # Development default only. Override this and the matching DATABASE_URL
       # before using the stack outside a local trusted environment.
       - POSTGRES_PASSWORD=${PERSISTENCE_POSTGRES_PASSWORD:-openmaic-dev}
+    # Bare-metal dev only: the in-compose app reaches postgres over the compose
+    # network and needs no published port; publishing to the host loopback lets
+    # an app started outside compose (npm start / pnpm dev) reach
+    # DATABASE_URL=...localhost:5432 without exposing the database to the LAN.
+    ports:
+      - '127.0.0.1:5432:5432'
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U openmaic -d openmaic']
       interval: 5s
@@ -82,6 +88,12 @@ services:
       - video-export
     expose:
       - '9000'
+    # Bare-metal dev only: same rationale as the postgres mapping — the
+    # in-compose app reaches this over the render network and needs no host
+    # port; loopback publishing lets an app started outside compose (npm start)
+    # point RENDER_SERVICE_URL at http://localhost:9000.
+    ports:
+      - '127.0.0.1:9000:9000'
     # Required for the entrypoint's iptables egress lockdown. Without it the
     # service still boots, but logs a warning and does NOT block Chromium egress.
     cap_add:
@@ -129,7 +141,12 @@ services:
     # mount. This is a ceiling inside the selected profile cgroup, not eager allocation.
     shm_size: 2gb
     networks:
+      # Bare-metal dev: `render` alone is internal-only, and Docker cannot
+      # publish host ports into an internal network — the loopback mapping
+      # below silently no-ops. Also attaching `default` (a normal bridge)
+      # gives the published port a routable path from the host.
       - render
+      - default
     restart: unless-stopped
 
 networks:

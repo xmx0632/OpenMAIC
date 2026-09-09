@@ -6,6 +6,7 @@ import {
   buildDocxBlob,
   buildScriptFileName,
   isScriptExportReady,
+  isScriptTextExportReady,
   SCRIPT_MIME_TYPES,
 } from '@/lib/export/use-export-script';
 import type { Scene } from '@/lib/types/stage';
@@ -58,6 +59,26 @@ describe('isScriptExportReady', () => {
     ['media is generating', readyState, { video: { status: 'generating' } }],
   ])('rejects export when %s', (_case, stageState, mediaTasks) => {
     expect(isScriptExportReady(stageState, mediaTasks)).toBe(false);
+  });
+});
+
+describe('isScriptTextExportReady', () => {
+  it('allows the text-only export whenever any scene is materialized', () => {
+    expect(isScriptTextExportReady({ scenes: [scene()] })).toBe(true);
+  });
+
+  it.each([
+    [
+      'a failed outline remains',
+      { scenes: [scene()], generatingOutlines: [], failedOutlines: [{}] },
+    ],
+    ['an outline is still generating', { scenes: [scene()], generatingOutlines: [{}] }],
+  ])('stays ready even with %s — unlike the full gate', (_case, stageState) => {
+    expect(isScriptTextExportReady(stageState)).toBe(true);
+  });
+
+  it('rejects the text-only export with no scenes', () => {
+    expect(isScriptTextExportReady({ scenes: [] })).toBe(false);
   });
 });
 

@@ -21,7 +21,11 @@ import { useStageStore } from '@/lib/store';
 import { useMediaGenerationStore } from '@/lib/store/media-generation';
 import { useExportPPTX } from '@/lib/export/use-export-pptx';
 import { useExportClassroom } from '@/lib/export/use-export-classroom';
-import { isScriptExportReady, useExportScript } from '@/lib/export/use-export-script';
+import {
+  isScriptExportReady,
+  isScriptTextExportReady,
+  useExportScript,
+} from '@/lib/export/use-export-script';
 import { isVideoExportEnabled } from '@/lib/config/feature-flags';
 import { useVideoRenderStore } from '@/lib/store/video-render';
 import { CircularProgress } from '@/components/ui/circular-progress';
@@ -104,11 +108,17 @@ export function HeaderControls({
   const videoRenderPercent = useVideoRenderStore((s) => s.percent);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
 
-  // Keep the original full-generation gate for the export menu. Script files
-  // are text-only, but the latest review confirmed that this menu intentionally
-  // stays unavailable until all media tasks have completed or failed.
+  // Two export gates: the full-generation gate (every outline settled, every
+  // media task terminal) for media-carrying exports, and a text-only gate for
+  // the script downloads — narration is collected from materialized scenes,
+  // so pending media or a failed/remaining outline must not lock it.
   const canExport = isScriptExportReady({ scenes, generatingOutlines, failedOutlines }, mediaTasks);
-  const exportLabel = canExport ? t('export.pptx') : t('share.notReady');
+  const canExportScript = isScriptTextExportReady({ scenes });
+  const exportLabel = canExport
+    ? t('export.pptx')
+    : canExportScript
+      ? t('export.script')
+      : t('share.notReady');
 
   const compact = variant === 'compact';
   const proChecked = proModeActive ?? mode === 'edit';
@@ -267,7 +277,7 @@ export function HeaderControls({
       <DropdownMenu modal={false} open={exportMenuOpen} onOpenChange={setExportMenuOpen}>
         <DropdownMenuTrigger asChild>
           <button
-            disabled={!canExport || isExporting || isExportingZip || isExportingScript}
+            disabled={!canExportScript || isExporting || isExportingZip || isExportingScript}
             title={
               isExporting || isExportingZip || isExportingScript
                 ? t('export.exporting')
@@ -275,7 +285,7 @@ export function HeaderControls({
             }
             className={cn(
               'shrink-0 p-2 rounded-full transition-all',
-              canExport && !isExporting && !isExportingZip && !isExportingScript
+              canExportScript && !isExporting && !isExportingZip && !isExportingScript
                 ? 'text-gray-400 dark:text-gray-500 hover:bg-white dark:hover:bg-gray-700 hover:text-gray-800 dark:hover:text-gray-200 hover:shadow-sm'
                 : 'text-gray-300 dark:text-gray-600 cursor-not-allowed opacity-50',
             )}
@@ -331,17 +341,13 @@ export function HeaderControls({
             </div>
           </DropdownMenuItem>
           <DropdownMenuSub>
-            <DropdownMenuSubTrigger
-              disabled={!canExport}
-              title={canExport ? undefined : t('export.mediaPending')}
-              className="cursor-pointer gap-2.5"
-            >
+            <DropdownMenuSubTrigger disabled={!canExportScript} className="cursor-pointer gap-2.5">
               <NotebookText className="w-4 h-4 text-gray-400 shrink-0" aria-hidden="true" />
               <span>{t('export.script')}</span>
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent className="min-w-[240px]">
               <DropdownMenuItem
-                disabled={!canExport || isExportingScript}
+                disabled={!canExportScript || isExportingScript}
                 onSelect={exportScriptMd}
                 className="cursor-pointer gap-2.5"
               >
@@ -354,7 +360,7 @@ export function HeaderControls({
                 </div>
               </DropdownMenuItem>
               <DropdownMenuItem
-                disabled={!canExport || isExportingScript}
+                disabled={!canExportScript || isExportingScript}
                 onSelect={exportScriptDocx}
                 className="cursor-pointer gap-2.5"
               >
