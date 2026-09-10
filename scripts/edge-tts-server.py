@@ -11,6 +11,7 @@
 voice 映射：请求里的 voice 名会被宽松匹配到 Edge 中文语音，
 默认女声 Xiaoxiao，含 "male"/"yun" 映射男声 Yunxi。
 """
+import asyncio
 import io
 import os
 
@@ -60,13 +61,21 @@ def resolve_voice(name: str) -> str:
 async def speech(req: SpeechRequest):
     voice = resolve_voice(req.voice)
     rate = f"{int((req.speed or 1.0) * 100):+d}%"
-    buf = io.BytesIO()
-    communicate = edge_tts.Communicate(req.input, voice, rate=rate)
-    async for chunk in communicate.stream():
-        if chunk["type"] == "audio":
-            buf.write(chunk["data"])
-    buf.seek(0)
-    return Response(content=buf.read(), media_type="audio/mpeg")
+    # edge-tts 偶发 NoAudioReceived（微软服务端抖动），重试后仍失败才报错
+    last_exc = None
+    for _ in range(3):
+        try:
+            buf = io.BytesIO()
+            communicate = edge_tts.Communicate(req.input, voice, rate=rate)
+            async for chunk in communicate.stream():
+                if chunk["type"] == "audio":
+                    buf.write(chunk["data"])
+            buf.seek(0)
+            return Response(content=buf.read(), media_type="audio/mpeg")
+        except edge_tts.exceptions.NoAudioReceived as exc:
+            last_exc = exc
+            await asyncio.sleep(0.5)
+    raise last_exc
 
 
 @app.get("/health")
