@@ -73,4 +73,36 @@ describe('resolveRequestOwnerId', () => {
     expect(resolveRequestOwnerId(request, responseHeaders, 'user-42')).toBe('user-42');
     expect(responseHeaders.has('set-cookie')).toBe(false);
   });
+
+  it('returns the pinned owner without reading or minting a cookie', () => {
+    vi.stubEnv('OPENMAIC_OWNER_OVERRIDE', 'anon:33a45246-abf3-4675-b526-04a53222a9c0');
+    const responseHeaders = new Headers();
+    const request = new Request('http://localhost/agent', {
+      headers: { cookie: 'anonymous_id=a652e716-0e2e-47f5-8432-4ee60f6f0977' },
+    });
+
+    expect(resolveRequestOwnerId(request, responseHeaders)).toBe(
+      'anon:33a45246-abf3-4675-b526-04a53222a9c0',
+    );
+    expect(responseHeaders.has('set-cookie')).toBe(false);
+  });
+
+  it('prefers an authenticated owner over the pinned owner', () => {
+    vi.stubEnv('OPENMAIC_OWNER_OVERRIDE', 'anon:pinned');
+    const responseHeaders = new Headers();
+
+    expect(
+      resolveRequestOwnerId(new Request('http://localhost/agent'), responseHeaders, 'user-42'),
+    ).toBe('user-42');
+  });
+
+  it('ignores a whitespace-only pinned owner', () => {
+    vi.stubEnv('OPENMAIC_OWNER_OVERRIDE', '   ');
+    const responseHeaders = new Headers();
+
+    const ownerId = resolveRequestOwnerId(new Request('http://localhost/agent'), responseHeaders);
+
+    expect(ownerId.startsWith('anon:')).toBe(true);
+    expect(responseHeaders.has('set-cookie')).toBe(true);
+  });
 });

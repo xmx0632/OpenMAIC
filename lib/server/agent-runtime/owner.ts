@@ -28,6 +28,23 @@ function anonymousCookieHeader(id: string): string {
 }
 
 /**
+ * Operator-pinned owner for single-operator deployments
+ * (`OPENMAIC_OWNER_OVERRIDE`).
+ *
+ * The anonymous cookie partitions data per browser profile: an incognito
+ * window or a second profile mints a fresh cookie and becomes a different
+ * user, so content generated there is invisible to the main browser. Pinning
+ * collapses every request onto one fixed owner — leave unset to keep the
+ * per-browser anonymous isolation. Only sensible where every visitor IS the
+ * one operator, the same trust shape `PERSISTENCE_ALLOW_INSECURE_DEV_AUTH`
+ * already documents for trusted-network deployments.
+ */
+export function pinnedOwnerId(): string | undefined {
+  const pinned = process.env.OPENMAIC_OWNER_OVERRIDE?.trim();
+  return pinned ? pinned : undefined;
+}
+
+/**
  * Resolve the request identity used to partition agent sessions.
  *
  * Session lists are user-visible data keyed by owner. A shared constant would
@@ -37,6 +54,10 @@ function anonymousCookieHeader(id: string): string {
  * An explicit `authenticatedOwnerId` (from the host's auth layer) is returned
  * verbatim: authenticated principals must not be partitioned under a fresh
  * anonymous identity, and no anonymous cookie is minted for them.
+ *
+ * A pinned owner (`OPENMAIC_OWNER_OVERRIDE`) wins over the anonymous cookie
+ * the same way, for single-operator deployments that opt out of per-browser
+ * partitioning.
  *
  * Otherwise the identity comes from a valid anonymous cookie, or a fresh UUID
  * is minted. A mint is only useful when it is persisted, so `responseHeaders`
@@ -55,6 +76,9 @@ export function resolveRequestOwnerId(
   authenticatedOwnerId?: string,
 ): string {
   if (authenticatedOwnerId) return authenticatedOwnerId;
+
+  const pinned = pinnedOwnerId();
+  if (pinned) return pinned;
 
   const existingId = readCookie(req.headers, ANONYMOUS_COOKIE);
   if (existingId && UUID_V4.test(existingId)) return `anon:${existingId}`;
