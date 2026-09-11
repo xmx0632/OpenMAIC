@@ -1850,11 +1850,15 @@ function usesCustomOpenAIBaseUrl(baseUrl?: string): boolean {
 }
 
 function shouldUseOpenAIStreamingChatCompat(providerId: ProviderId, baseUrl?: string): boolean {
-  return (
-    providerId === 'openai' &&
-    usesCustomOpenAIBaseUrl(baseUrl) &&
-    process.env.OPENAI_COMPAT_USE_STREAMING_CHAT === 'true'
-  );
+  if (process.env.OPENAI_COMPAT_USE_STREAMING_CHAT !== 'true') return false;
+  if (providerId === 'openai') return usesCustomOpenAIBaseUrl(baseUrl);
+  // Named OpenAI-compatible providers (GLM, DeepSeek, Qwen, ...) hit the same
+  // wall: a non-streaming /chat/completions response only gets headers after
+  // the entire generation completes, so any long output is killed by undici's
+  // 300s headers timeout before the body ever arrives. Converting those
+  // requests to streaming (then re-aggregating, see fetchCustomOpenAIChat)
+  // keeps headers/chunks flowing within seconds for any generation length.
+  return PROVIDERS[providerId]?.type === 'openai';
 }
 
 function requestUrlString(input: RequestInfo | URL): string {
