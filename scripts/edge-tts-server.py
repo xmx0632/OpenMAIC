@@ -25,11 +25,28 @@ app.add_middleware(
     CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
 )
 
-# 常用 Edge 中文神经语音
+# OpenAI 音色目录 → Edge 中文神经语音 的完整映射
+# （edge-tts 免费通道当前仅 8 个中文音色：晓晓/晓伊/云健/云希/云夏/云扬 + 东北晓北/陕西晓妮）
 VOICE_MAP = {
-    "female": "zh-CN-XiaoxiaoNeural",       # 女声·晓晓（默认）
-    "male": "zh-CN-YunxiNeural",            # 男声·云希
-    "child": "zh-CN-XiaoyiNeural",          # 童声·晓伊",
+    # 女声
+    "alloy": "zh-CN-XiaoxiaoNeural",      # 晓晓·温暖女声（默认）
+    "nova": "zh-CN-YunxiaNeural",         # 云夏·清亮女声
+    "shimmer": "zh-CN-liaoning-XiaobeiNeural",  # 晓北·东北口音女声
+    "coral": "zh-CN-shaanxi-XiaoniNeural",      # 晓妮·陕西口音女声
+    "sage": "zh-CN-XiaoyiNeural",         # 晓伊·少女音
+    "marin": "zh-CN-XiaoxiaoNeural",      # （并入晓晓）
+    # 男声
+    "onyx": "zh-CN-YunxiNeural",          # 云希·阳光男声
+    "ash": "zh-CN-YunjianNeural",         # 云健·浑厚男声
+    "echo": "zh-CN-YunyangNeural",        # 云扬·新闻播音男声
+    "fable": "zh-CN-YunxiNeural",         # （并入云希）
+    "ballad": "zh-CN-YunyangNeural",      # （并入云扬）
+    "cedar": "zh-CN-YunjianNeural",       # （并入云健）
+    # 语义别名（兼容直接传语义名）
+    "female": "zh-CN-XiaoxiaoNeural",
+    "male": "zh-CN-YunxiNeural",
+    "child": "zh-CN-XiaoyiNeural",        # 晓伊·童声
+    "tongtong": "zh-CN-XiaoxiaoNeural",
 }
 DEFAULT_VOICE = "zh-CN-XiaoxiaoNeural"
 
@@ -37,22 +54,23 @@ DEFAULT_VOICE = "zh-CN-XiaoxiaoNeural"
 class SpeechRequest(BaseModel):
     model: str = "edge-tts"
     input: str
-    voice: str = "female"
+    voice: str = "alloy"
     response_format: str = "mp3"
     speed: float = 1.0
 
 
 def resolve_voice(name: str) -> str:
-    n = (name or "").lower()
-    if not n or n in ("female", "tongtong", "default", "alloy"):
-        return VOICE_MAP["female"]
-    if "male" in n or "yun" in n or "guy" in n:
-        return VOICE_MAP["male"]
-    if "child" in n or "yi" in n:
-        return VOICE_MAP["child"]
+    n = (name or "").lower().strip()
+    if n in VOICE_MAP:
+        return VOICE_MAP[n]
     # 已经是 Edge 语音名就直接用
     if n.startswith("zh-") or n.startswith("en-"):
         return name
+    # 未知名字按语义兜底
+    if "male" in n or "yun" in n:
+        return VOICE_MAP["male"]
+    if "child" in n:
+        return VOICE_MAP["child"]
     return DEFAULT_VOICE
 
 
