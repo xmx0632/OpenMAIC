@@ -1,15 +1,29 @@
 #!/usr/bin/env python3
-"""edge-tts 的 OpenAI 兼容包装服务。
+"""edge-tts + VibeVoice 双引擎的 OpenAI 兼容包装服务。
 
-把免费的微软 Edge 神经网络语音暴露成 POST /v1/audio/speech
-（OpenAI TTS 格式），供 OpenMAIC 的 TTS_OPENAI 通道使用。
+把语音合成暴露成 POST /v1/audio/speech（OpenAI TTS 格式），
+供 OpenMAIC 的 TTS_OPENAI 通道使用。两个引擎按 voice 名自动路由：
 
-用法：
-  python3 edge-tts-server.py            # 监听 8500
-  PORT=9000 python3 edge-tts-server.py
+  Edge 引擎（默认，免费秒出）：
+    alloy/nova/shimmer/... 见下方 VOICE_MAP（中文神经语音）
 
-voice 映射：请求里的 voice 名会被宽松匹配到 Edge 中文语音，
-默认女声 Xiaoxiao，含 "male"/"yun" 映射男声 Yunxi。
+  VibeVoice 引擎（本地大模型，质量高，RTF 约 2x，首次加载约 40s）：
+    vv-xinran   → zh-Xinran_woman  中文女声，清晰自然（推荐）
+    vv-bowen    → zh-Bowen_man     中文男声，沉稳
+    vv-anchen   → zh-Anchen_man_bgm 中文男声，带 BGM 氛围
+    vv-<自定义名> → demo/voices/<自定义名>.wav（语音克隆：放 5-10s 清晰人声
+                   样音即可作为新音色，详见 VibeVoice 仓库 VOICES-ZH.md）
+
+用法（必须用 VibeVoice 的 venv 启动，两引擎共用）：
+  /path/to/VibeVoice/venv/bin/python edge-tts-server.py     # 监听 8500
+  PORT=9000 ...                                              # 自定义端口
+
+环境变量：
+  VIBEVOICE_DIR   VibeVoice 代码目录（默认本机路径）
+  VIBEVOICE_MODEL 1.5B 权重目录（默认本机路径）
+  VIBEVOICE_DISABLED=1  禁用 VibeVoice 引擎（纯 edge 模式，用系统 python 即可）
+
+注意：VibeVoice 引擎忽略 speed 参数（Edge 引擎保持 1.25x 固定倍率）。
 """
 import io
 import os
@@ -74,10 +88,37 @@ def resolve_voice(name: str) -> str:
     return DEFAULT_VOICE
 
 
+# ZOO-474：owner 确认视频配音固定为正常语速的 1.25 倍。
+# 为零侵入 OpenMAIC 应用源代码（改应用需重新 build 并重启主服务），
+# 语速在本服务统一固定：忽略请求中的 speed，一律按 TTS_SPEED 倍率合成，
+# 换算 rate = (TTS_SPEED - 1) × 100%（1.25 → "+25%"）。
+# 历史遗留：原换算误把倍率当偏移量（speed=1.0 被换成 "+100%" 即 2 倍速），
+# 即最初"配音语速过快"的根因，本换算已修正。
+# 微调语速：改下方默认值或设 TTS_SPEED 环境变量，重启本进程即可（秒级）。
+TTS_SPEED = float(os.environ.get("TTS_SPEED", "1.25"))
+
+
+def speed_to_rate() -> str:
+    offset = max(int(round((TTS_SPEED - 1.0) * 100)), -100)
+    return f"{offset:+d}%"
+
+
 @app.post("/v1/audio/speech")
 async def speech(req: SpeechRequest):
+    # VibeVoice 引擎路由（vv-* 或 zh-<Name> 格式；慢但质量高，RTF 约 2x）
+    if not VIBEVOICE_DISABLED:
+        vv_voice = vv_resolve_voice(req.voice)
+        if vv_voice is not None:
+            from starlette.concurrency import run_in_threadpool
+
+            wav = await run_in_threadpool(vv_generate, req.input, vv_voice)
+            if req.response_format == "wav":
+                return Response(content=wav, media_type="audio/wav")
+            return Response(content=_wav_to_mp3(wav), media_type="audio/mpeg")
+
+    # Edge 引擎（默认）
     voice = resolve_voice(req.voice)
-    rate = f"{int((req.speed or 1.0) * 100):+d}%"
+    rate = speed_to_rate()
     buf = io.BytesIO()
     communicate = edge_tts.Communicate(req.input, voice, rate=rate)
     async for chunk in communicate.stream():
@@ -89,7 +130,143 @@ async def speech(req: SpeechRequest):
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "provider": "edge-tts"}
+    return {
+        "status": "ok",
+        "provider": "edge-tts + vibevoice",
+        "vibevoice": {"enabled": not VIBEVOICE_DISABLED, "loaded": _VV["model"] is not None},
+        "vibevoice_voices": ["vv-xinran", "vv-bowen", "vv-anchen", "vv-<自定义克隆音色>"],
+    }
+
+
+# ---------------------------------------------------------------------------
+# VibeVoice 引擎（本地 1.5B 大模型 TTS + 零样本克隆）
+# 懒加载：首个 vv-* 请求才初始化（约 40s，常驻约 5GB 内存）
+# ---------------------------------------------------------------------------
+VIBEVOICE_DISABLED = os.environ.get("VIBEVOICE_DISABLED") == "1"
+VIBEVOICE_DIR = os.environ.get("VIBEVOICE_DIR", "/Volumes/macext/code/demo/VibeVoice")
+VIBEVOICE_MODEL = os.environ.get("VIBEVOICE_MODEL", "/Volumes/macext/llm-model/models/VibeVoice-1.5B")
+
+# OpenAI 音色名 → VibeVoice 内置音色
+VV_VOICE_MAP = {
+    "vv-xinran": "zh-Xinran_woman",
+    "vv-bowen": "zh-Bowen_man",
+    "vv-anchen": "zh-Anchen_man_bgm",
+}
+_VV = {"model": None, "processor": None, "lock": __import__("threading").Lock()}
+
+# VibeVoice 官方建议：中文用英文标点，服务端自动归一化
+_PUNCT_MAP = str.maketrans({
+    "，": ",", "。": ".", "！": "!", "？": "?", "；": ";", "：": " ",
+    "（": " ", "）": " ", "「": " ", "」": " ", "“": " ", "”": " ",
+})
+
+
+def vv_resolve_voice(name: str) -> str | None:
+    """返回 VibeVoice 音色名；不是 VibeVoice 音色则 None。"""
+    n = (name or "").strip()
+    low = n.lower()
+    if low in VV_VOICE_MAP:
+        return VV_VOICE_MAP[low]
+    if low.startswith("vv-"):
+        return n[3:]  # vv-<自定义克隆音色名> → demo/voices/<名>.wav
+    if n.startswith("zh-") and not n.startswith("zh-CN"):
+        # VibeVoice 音色命名（zh-Xinran_woman）；Edge 中文语音是 zh-CN-*
+        return n
+    return None
+
+
+def _vv_init():
+    """懒加载 VibeVoice 模型（线程安全单例）。"""
+    if _VV["model"] is not None:
+        return
+    with _VV["lock"]:
+        if _VV["model"] is not None:
+            return
+        import sys
+
+        sys.path.insert(0, VIBEVOICE_DIR)
+        os.environ.setdefault("HF_HUB_OFFLINE", "1")
+        os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+
+        import torch
+        from vibevoice.modular.modeling_vibevoice_inference import (
+            VibeVoiceForConditionalGenerationInference,
+        )
+        from vibevoice.processor.vibevoice_processor import VibeVoiceProcessor
+
+        print(f"[vibevoice] loading model from {VIBEVOICE_MODEL} ...")
+        processor = VibeVoiceProcessor.from_pretrained(VIBEVOICE_MODEL)
+        model = VibeVoiceForConditionalGenerationInference.from_pretrained(
+            VIBEVOICE_MODEL,
+            torch_dtype=torch.bfloat16,
+            device_map=None,
+            attn_implementation="sdpa",  # Mac 无 CUDA 注意力，用 sdpa
+        )
+        model = model.to("mps")
+        model.eval()
+        model.set_ddpm_inference_steps(num_steps=10)
+        _VV["model"], _VV["processor"] = model, processor
+        print("[vibevoice] model ready")
+
+
+def vv_generate(text: str, voice: str) -> bytes:
+    """同步生成，返回 wav 字节（24kHz int16 单声道）。"""
+    import numpy as np
+    import torch
+
+    _vv_init()
+    voice_wav = os.path.join(VIBEVOICE_DIR, "demo", "voices", f"{voice}.wav")
+    if not os.path.isfile(voice_wav):
+        raise FileNotFoundError(
+            f"VibeVoice 音色不存在: {voice}（缺 {voice_wav}；克隆音色请把 5-10s 人声样音放到该目录，文件名即音色名）"
+        )
+
+    text = "Speaker 1: " + text.strip().translate(_PUNCT_MAP)
+    inputs = _VV["processor"](
+        text=[text],
+        voice_samples=[[voice_wav]],
+        padding=True,
+        return_tensors="pt",
+        return_attention_mask=True,
+    )
+    outputs = _VV["model"].generate(
+        **inputs,
+        max_new_tokens=None,
+        cfg_scale=1.3,
+        tokenizer=_VV["processor"].tokenizer,
+        generation_config={"do_sample": False},
+    )
+    audio = outputs.speech_outputs[0]
+    if isinstance(audio, torch.Tensor):
+        audio = audio.detach().cpu().to(torch.float32).numpy()  # bf16 需先转 float32
+    pcm = (np.clip(audio, -1.0, 1.0) * 32767).astype("<i2").tobytes()
+
+    import wave
+
+    with io.BytesIO() as buf:
+        with wave.open(buf, "wb") as w:
+            w.setnchannels(1)
+            w.setsampwidth(2)
+            w.setframerate(24000)
+            w.writeframes(pcm)
+        return buf.getvalue()
+
+
+def _wav_to_mp3(wav_bytes: bytes) -> bytes:
+    import subprocess
+    import tempfile
+
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+        f.write(wav_bytes)
+        wav_path = f.name
+    try:
+        return subprocess.run(
+            ["ffmpeg", "-loglevel", "error", "-y", "-i", wav_path, "-b:a", "128k", "-f", "mp3", "pipe:1"],
+            capture_output=True,
+            check=True,
+        ).stdout
+    finally:
+        os.unlink(wav_path)
 
 
 if __name__ == "__main__":
