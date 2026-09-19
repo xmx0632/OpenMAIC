@@ -164,6 +164,44 @@ _PUNCT_MAP = str.maketrans({
     "（": " ", "）": " ", "「": " ", "」": " ", "“": " ", "”": " ",
 })
 
+# 数字归一化（2026-09-20）：VibeVoice 训练/推理均不做 text normalization（官方 FAQ Q3），
+# 阿拉伯数字与 % 会被念成英文（1977 → "nineteen seventy-seven"，77% → 英文）。
+# 中文旁白场景统一在服务端转汉字；Edge 引擎自带归一化，不走这段。
+import re as _re
+
+_DIGITS_CN = "零一二三四五六七八九"
+
+
+def _cn_num(num_str: str) -> str:
+    """权位读法（77→七十七，3.5→三点五），cn2an 失败时原样返回。"""
+    try:
+        from cn2an import an2cn
+
+        return an2cn(num_str)
+    except Exception:
+        return num_str
+
+
+def normalize_numbers(text: str) -> str:
+    # 1) 年份：恰好 4 位数字+「年」→ 逐位读（1977年 → 一九七七年）
+    text = _re.sub(
+        r"(?<![0-9])(\d{4})年",
+        lambda m: "".join(_DIGITS_CN[int(c)] for c in m.group(1)) + "年",
+        text,
+    )
+    # 2) 百分比：77% → 百分之七十七
+    text = _re.sub(r"(\d+(?:\.\d+)?)%", lambda m: "百分之" + _cn_num(m.group(1)), text)
+    # 3) 其余数字（含小数）→ 权位读法；紧邻英文字母的不动（GPT-4 / iPhone 类）
+    def _other(m):
+        s, e = m.span()
+        before = text[s - 1] if s > 0 else ""
+        after = text[e] if e < len(text) else ""
+        if (before.isascii() and before.isalpha()) or (after.isascii() and after.isalpha()):
+            return m.group(0)
+        return _cn_num(m.group(0))
+
+    return _re.sub(r"\d+(?:\.\d+)?", _other, text)
+
 
 def vv_resolve_voice(name: str) -> str | None:
     """返回 VibeVoice 音色名；不是 VibeVoice 音色则 None。"""
@@ -225,7 +263,7 @@ def vv_generate(text: str, voice: str) -> bytes:
             f"VibeVoice 音色不存在: {voice}（缺 {voice_wav}；克隆音色请把 5-10s 人声样音放到该目录，文件名即音色名）"
         )
 
-    text = "Speaker 1: " + text.strip().translate(_PUNCT_MAP)
+    text = "Speaker 1: " + normalize_numbers(text.strip().translate(_PUNCT_MAP))
     # 串行锁包住 编码+生成+解码 全程（不只是 generate）：processor 编码也吃内存
     with _VV_GEN_LOCK:
         return _vv_generate_locked(text, voice_wav)
