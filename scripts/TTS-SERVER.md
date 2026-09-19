@@ -42,6 +42,8 @@
 - VibeVoice 代码库（含 Mac 补丁）：https://gitee.com/xmx0632/vibe-voice
 - 1.5B 权重（5GB）+ Qwen2.5 分词器缓存（部署见该仓库 SETUP-ZH.md）
 - ffmpeg（wav 转 mp3）
+- cn2an（中文数字转换，2026-09-20 数字归一化依赖）：
+  `HTTPS_PROXY=<代理> /path/to/VibeVoice/venv/bin/pip install cn2an`
 
 ## 运行时切换音色（免重启）
 
