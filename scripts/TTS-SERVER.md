@@ -53,3 +53,28 @@ curl -X POST /api/generate-classroom -d '{...,"ttsVoice":"vv-xinran"}'
 ```
 
 可用值：alloy 等 Edge 音色；vv-xinran / vv-bowen / vv-anchen（VibeVoice）；vv-<自定义克隆音色>。
+
+## 故障分析实录（2026-09-20，含崩溃现场还原）
+
+### Anchen 音色的 BGM 从哪来
+
+BGM 不是功能，是烧在样音文件里的：`zh-Anchen_man_bgm.wav` 本身就是混好背景音乐的人声样音（官方「氛围音色」产品线，另有 en-Alice_woman_bgm 同款）。零样本克隆会把样音完整声学场景（含音乐）一起学走。想要无 BGM：用 vv-xinran / vv-bowen（样音干净），或拿干净人声样音做克隆音色。
+
+### 崩溃根因：多个 VibeVoice 任务并发重叠（2026-09-20 实锤）
+
+现场日志：任务A（vv-xinran 32/34 收尾）与任务B（vv-anchen 1/34 开场）重叠约 5 分钟后服务崩溃（05:04），随后 4 次重启尝试 exit 1（内存未回收），05:08 重启成功。
+
+机制：本服务生成路径**没有串行保护**（锁只在模型初始化）——uvicorn 线程池允许多个 vv_generate 并发叠跑；5GB 常驻模型 × N 份并发生成激活内存 + MPS 并发前向 → abort（exit 134/1）。单条生成本身健康（小片段 6-15s/条，RTF 正常）。
+
+### 相邻隐患（同日代码分析，未触发但存在）
+
+- openMAIC 对每个 TTS 请求默认只等 **30 秒**（`tts-providers.ts` DEFAULT_TTS_REQUEST_TIMEOUT_MS=30000）。长片段（>30s 音频）会超时报错。对策（免改代码）：openMAIC `.env.local` 加 `TTS_REQUEST_TIMEOUT_MS=600000`
+- `TTS_MAX_TEXT_LENGTH` 映射表没有 openai-tts 条目 → 长口播不切分整段下发
+
+### 运行纪律（防再崩）
+
+1. **同一时间只跑一个 VibeVoice 音色的课程**；提交前 `tail` 服务日志确认无进行中的生成
+2. 崩溃后重启失败（exit 1）= 内存未回收，等 1-2 分钟再试
+3. 本服务无自动重启机制（无 launchd/crontab），崩了要手动拉起：
+   `cd openmaic/scripts && nohup /path/to/VibeVoice/venv/bin/python edge-tts-server.py > /tmp/tts-server.log 2>&1 &`
+4. 长期根治（生成串行锁 + KeepAlive）需改代码，待定
