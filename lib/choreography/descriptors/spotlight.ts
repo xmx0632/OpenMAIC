@@ -12,14 +12,15 @@ import type { AnimationDescriptor } from './types';
  *   "dim everywhere except the cutout" compositing rather than "draw a black
  *   rect".
  * - border: 500ms expo-out, delayed 50ms, fading in as it settles.
- * - dim: static `rgba(0,0,0,{dimness})`, dimness default 0.5, with the cutout
+ * - dim: static `rgba(0,0,0,{dimness})`, dimness default 0.15, with the cutout
  *   subtracted.
  *
- * The `dimness` default is 0.5 — the value the runtime actually renders: a
- * spotlight action with no `dimOpacity` is stored as `action.dimOpacity ?? 0.5`
- * (`ActionEngine.executeSpotlight`; DSL documents `dimOpacity` default 0.5), so
- * the component's own `?? 0.7` fallback is unreachable at playback. The exporter
- * must use 0.5 to match.
+ * The `dimness` default is 0.15 (ZOO-551: the previous 0.5 read as "the screen
+ * goes almost black" during knowledge-point spotlights on dense slides; 0.15
+ * keeps the focus cue readable). A spotlight action with no `dimOpacity`
+ * renders `action.dimOpacity ?? 0.15` (`ActionEngine.executeSpotlight`), and
+ * the canvas store's no-options default matches at 0.15. The exporter must
+ * use the same value to match.
  *
  * Cutout/border easing `[0.16, 1, 0.3, 1]` (the spotlight expo-out).
  */
@@ -27,7 +28,7 @@ export const spotlightV1: AnimationDescriptor = {
   id: 'spotlight.v1',
   version: 1,
   effect: 'spotlight',
-  params: { dimness: 0.5 },
+  params: { dimness: 0.15 },
   zIndex: 100,
   layers: [
     {

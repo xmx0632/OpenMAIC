@@ -60,9 +60,10 @@ describe('every shipped descriptor conforms to the zod schema', () => {
 describe('spotlight.v1 pins the source animation values', () => {
   it('has the dim/cutout/border layers and z-index 100', () => {
     expect(spotlightV1.zIndex).toBe(100);
-    // 0.5 is the runtime default (executeSpotlight: action.dimOpacity ?? 0.5),
-    // not the component's unreachable ?? 0.7 fallback.
-    expect(spotlightV1.params).toMatchObject({ dimness: 0.5 });
+    // 0.15 is the runtime default (executeSpotlight: action.dimOpacity ?? 0.15,
+    // canvas store no-options default 0.15) — ZOO-551 lowered it from 0.5,
+    // which read as "the screen goes almost black" on dense slides.
+    expect(spotlightV1.params).toMatchObject({ dimness: 0.15 });
     expect(spotlightV1.layers.map((l) => l.id).sort()).toEqual(['border', 'cutout', 'dim']);
   });
 

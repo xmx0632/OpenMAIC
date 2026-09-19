@@ -36,6 +36,21 @@ function mintLearnerKey(): string {
   return `anon:${uuid}`;
 }
 
+/**
+ * ZOO-477: optional pinned learner key for single-operator deployments
+ * (NEXT_PUBLIC_LEARNER_KEY_OVERRIDE in .env.local). When set, EVERY
+ * resolution path returns this one key — not just the configured provider,
+ * but also callers that inject their own KV store (PBL runtime, quiz,
+ * whiteboard pass one to `getLearnerKey(kv)`, which normally bypasses the
+ * configured provider). Without this guard those paths keep minting
+ * per-device keys, so their request URLs embed a different learner than the
+ * `x-learner-key` header and the persistence server rejects them
+ * ("authenticated learner may not access the requested learner partition").
+ * Unset for multi-user deployments: a pinned key would merge every learner's
+ * runtime into one partition.
+ */
+const PINNED_LEARNER_KEY = process.env.NEXT_PUBLIC_LEARNER_KEY_OVERRIDE?.trim() || undefined;
+
 async function mintPersisted(store: KVStore): Promise<string> {
   const minted = mintLearnerKey();
   await store.set(LEARNER_KEY_KV_KEY, minted, 'device');
@@ -46,6 +61,9 @@ async function mintPersisted(store: KVStore): Promise<string> {
 }
 
 async function readOrMint(store: KVStore): Promise<string> {
+  // Must gate the READ too, not just the mint: a browser that already carries
+  // a per-device key in localStorage would otherwise keep resolving it.
+  if (PINNED_LEARNER_KEY) return PINNED_LEARNER_KEY;
   const existing = await store.get<string>(LEARNER_KEY_KV_KEY, 'device');
   if (existing) return existing;
 

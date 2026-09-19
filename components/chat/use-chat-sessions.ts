@@ -2193,6 +2193,13 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
         action.type === 'discussion'
       ) {
         const now = Date.now();
+        // ZOO-477: optional fields must not reach the record as explicit
+        // `undefined` members — @openmaic/storage's plain-JSON gate rejects
+        // them ("undefined member (dropped by JSON)") and the whole chat
+        // session save rolls back. Omit the key instead (same idiom as
+        // lib/chat/pi/tools/native-spotlight.ts).
+        const spotlight = action as SpotlightAction;
+        const discussion = action as DiscussionAction;
         buffer.pushAction({
           messageId,
           actionId: `${action.type}-${now}`,
@@ -2201,13 +2208,15 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
             action.type === 'spotlight'
               ? {
                   elementId: action.elementId,
-                  dimOpacity: (action as SpotlightAction).dimOpacity,
+                  ...(spotlight.dimOpacity === undefined
+                    ? {}
+                    : { dimOpacity: spotlight.dimOpacity }),
                 }
               : action.type === 'laser'
                 ? { elementId: action.elementId }
                 : {
-                    topic: (action as DiscussionAction).topic,
-                    prompt: (action as DiscussionAction).prompt,
+                    topic: discussion.topic,
+                    ...(discussion.prompt === undefined ? {} : { prompt: discussion.prompt }),
                   },
           agentId: 'default-1',
         });

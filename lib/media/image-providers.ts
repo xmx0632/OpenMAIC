@@ -188,7 +188,7 @@ export async function testImageConnectivity(
   }
 }
 
-export async function generateImage(
+async function dispatchImageGeneration(
   config: ImageGenerationConfig,
   options: ImageGenerationOptions,
 ): Promise<ImageGenerationResult> {
@@ -212,6 +212,72 @@ export async function generateImage(
     default:
       throw new Error(`Unsupported image provider: ${config.providerId}`);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Global image rate limiting (ZOO-511)
+//
+// IMAGE_RATE_LIMIT_IPM caps how many images per minute the whole server sends
+// to image providers (0/unset = unlimited). Calls are serialized through one
+// queue and spaced >= 60000/IPM * 1.1 ms apart so a rolling-window limiter
+// like SiliconFlow's free tier (2 IPM) is never tripped. Provider 429s are
+// additionally retried with the same spacing (IMAGE_RATE_429_RETRIES, default 2).
+// ---------------------------------------------------------------------------
+
+const IMAGE_RATE_LIMIT_IPM = Number(process.env.IMAGE_RATE_LIMIT_IPM || 0);
+const IMAGE_RATE_429_RETRIES = Number(process.env.IMAGE_RATE_429_RETRIES ?? 2);
+
+function imageRateIntervalMs(): number {
+  if (!(IMAGE_RATE_LIMIT_IPM > 0)) return 0;
+  // +10% margin: exactly 60000/IPM spacing can still trip a rolling window.
+  return Math.ceil((60000 / IMAGE_RATE_LIMIT_IPM) * 1.1);
+}
+
+let imageQueue: Promise<unknown> = Promise.resolve();
+let lastImageStartAt = 0;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function msUntilNextImageSlot(): number {
+  const interval = imageRateIntervalMs();
+  if (interval <= 0) return 0;
+  return Math.max(0, interval - (Date.now() - lastImageStartAt));
+}
+
+async function generateImageRateLimited(
+  config: ImageGenerationConfig,
+  options: ImageGenerationOptions,
+): Promise<ImageGenerationResult> {
+  for (let attempt = 0; ; attempt++) {
+    const wait = msUntilNextImageSlot();
+    if (wait > 0) await sleep(wait);
+    lastImageStartAt = Date.now();
+    try {
+      return await dispatchImageGeneration(config, options);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const retryable = /\(429\)|Too Many Requests/i.test(message) && attempt < IMAGE_RATE_429_RETRIES;
+      if (!retryable) throw err;
+      // 429 from the provider: back off a full rate interval, then retry.
+    }
+  }
+}
+
+export function generateImage(
+  config: ImageGenerationConfig,
+  options: ImageGenerationOptions,
+): Promise<ImageGenerationResult> {
+  if (imageRateIntervalMs() <= 0) return dispatchImageGeneration(config, options);
+  // Serialize: the rate slot is only computed when the previous request has
+  // settled, keeping the min-gap invariant regardless of how callers overlap.
+  const run = imageQueue.then(
+    () => generateImageRateLimited(config, options),
+    () => generateImageRateLimited(config, options),
+  );
+  imageQueue = run.catch(() => {});
+  return run;
 }
 
 export function aspectRatioToDimensions(

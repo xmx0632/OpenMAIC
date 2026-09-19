@@ -1,0 +1,154 @@
+
+> openmaic@1.0.1 start /Volumes/macext/code/demo/OpenMAIC
+> next start
+
+▲ Next.js 16.2.11
+- Local:         http://localhost:3000
+- Network:       http://192.168.1.200:3000
+✓ Ready in 72ms
+⚠ Warning: Next.js inferred your workspace root, but it may not be correct.
+ We detected multiple lockfiles and selected the directory of /Volumes/macext/code/demo/package-lock.json as the root directory.
+ To silence this warning, set `outputFileTracingRoot` in your Next.js config, or consider removing one of the lockfiles if it's not needed.
+   See https://nextjs.org/docs/app/api-reference/config/next-config-js/output#caveats for more information.
+ Detected additional lockfiles: 
+   * /Volumes/macext/code/demo/OpenMAIC/pnpm-workspace.yaml
+
+⚠ "next start" does not work with "output: standalone" configuration. Use "node .next/standalone/server.js" instead.
+[2026-09-11T17:46:08.656Z] [INFO] [ServerProviderConfig] [ServerProviderConfig] Loaded (server-providers.yml): 2 LLM, 1 TTS, 0 ASR, 0 PDF, 0 Image, 0 Video, 0 WebSearch providers
+[2026-09-11T17:46:08.891Z] [INFO] [AgentRunner] runner e553aeb7:44912 started (scan=1000ms, heartbeat=2000ms, leaseTtl=10000ms, maxConcurrent=2, maxAttempts=5)
+[2026-09-11T17:46:08.891Z] [INFO] [AgentRunner] agent runner toolset: ask_user always; web_search when a web-search backend is configured; create_skill/read_skill/patch_skill and the skill-scoped read when skills are installed; fetch_url always (URL trust gate enforced per call); read_stage/patch_stage/grep_stage and create_stage/read_stage_outline always (owner-scoped store)
+[2026-09-11T17:46:09.059Z] [WARN] [PersistenceAuth] Persistence is running the development authenticator in production: it provides no user isolation, so this endpoint must only be reachable on a trusted network. Replace it with real session verification before serving public traffic.
+(node:44912) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[2026-09-11T17:46:13.761Z] [INFO] [ServerProviderConfig] [ServerProviderConfig] Loaded (server-providers.yml): 2 LLM, 1 TTS, 0 ASR, 0 PDF, 0 Image, 0 Video, 0 WebSearch providers
+[2026-09-11T17:46:59.482Z] [INFO] [Classroom] Using server-configured model: glm:glm-5.3-flash
+[2026-09-11T17:48:14.888Z] [INFO] [Classroom] Generated 6 scene outlines (languageDirective: 全程使用简体中文授课，语气直接、口语化，像资深同事在旁边带着改PPT，不堆设计专业术语。涉及软件功能（如参考线、对齐工具）时用职场人熟悉的日常说法解释，PPT、Office 等软件名称保留英文。受众是没有设计基础的职场新人，多用'你'直接对话，每个改动都给出'现在就能动手'的具体操作指令。, courseTitle: 让PPT大气起来的3个改动)
+[2026-09-11T17:48:14.894Z] [INFO] [Classroom] Stage 2: Generating scene content and actions...
+[2026-09-11T17:54:35.186Z] [INFO] [Classroom] Scene "领导说"再大气一点"，到底啥意思？": 12 actions
+[2026-09-11T17:58:22.411Z] [INFO] [Classroom] Scene "改动一：信息降噪——一页只讲一件事": 14 actions
+[2026-09-11T18:03:27.844Z] [INFO] [Classroom] Scene "改动二：对齐与网格——让页面稳起来": 12 actions
+[2026-09-11T18:08:53.435Z] [INFO] [Classroom] Scene "改动三：字体层级与留白——给页面呼吸感": 10 actions
+[2026-09-11T18:09:42.256Z] [INFO] [Classroom] Scene "快速检验：你能一眼看出问题吗？": 2 actions
+[2026-09-11T18:14:30.726Z] [INFO] [Classroom] Scene "交稿前2分钟：直接套用的检查清单": 8 actions
+[2026-09-11T18:14:30.732Z] [INFO] [Classroom] Pipeline complete: 6 scenes generated
+[2026-09-11T18:14:33.732Z] [INFO] [ClassroomMedia] Generated TTS: tts_s1_action_iGBgRf5l.mp3 (114768 bytes)
+[2026-09-11T18:14:35.729Z] [INFO] [ClassroomMedia] Generated TTS: tts_s1_action_s43eJAD4.mp3 (49680 bytes)
+[2026-09-11T18:14:37.779Z] [INFO] [ClassroomMedia] Generated TTS: tts_s1_action_kw61y2tA.mp3 (58032 bytes)
+[2026-09-11T18:14:39.944Z] [INFO] [ClassroomMedia] Generated TTS: tts_s1_action_3nKhxh9J.mp3 (59616 bytes)
+[2026-09-11T18:14:42.012Z] [INFO] [ClassroomMedia] Generated TTS: tts_s1_action_PBCOgAu7.mp3 (50976 bytes)
+[2026-09-11T18:14:44.185Z] [INFO] [ClassroomMedia] Generated TTS: tts_s1_action_3Oi4WgIV.mp3 (50544 bytes)
+[2026-09-11T18:14:45.695Z] [INFO] [ClassroomMedia] Generated TTS: tts_s2_action_-uKJDg6N.mp3 (27360 bytes)
+[2026-09-11T18:14:47.559Z] [INFO] [ClassroomMedia] Generated TTS: tts_s2_action_kMNfc9KV.mp3 (70704 bytes)
+[2026-09-11T18:14:48.967Z] [INFO] [ClassroomMedia] Generated TTS: tts_s2_action_mV_kAE1o.mp3 (37440 bytes)
+[2026-09-11T18:14:50.350Z] [INFO] [ClassroomMedia] Generated TTS: tts_s2_action_EjcMtVRr.mp3 (17712 bytes)
+[2026-09-11T18:14:52.467Z] [INFO] [ClassroomMedia] Generated TTS: tts_s2_action_tanyS7Ca.mp3 (49824 bytes)
+[2026-09-11T18:14:54.038Z] [INFO] [ClassroomMedia] Generated TTS: tts_s2_action_MhR0y4OK.mp3 (45936 bytes)
+[2026-09-11T18:14:56.194Z] [INFO] [ClassroomMedia] Generated TTS: tts_s2_action_cRK9WNja.mp3 (56448 bytes)
+[2026-09-11T18:14:57.763Z] [INFO] [ClassroomMedia] Generated TTS: tts_s3_action_qvU5Ct-6.mp3 (48672 bytes)
+[2026-09-11T18:14:59.303Z] [INFO] [ClassroomMedia] Generated TTS: tts_s3_action_x8kMRJUG.mp3 (39600 bytes)
+[2026-09-11T18:15:01.062Z] [INFO] [ClassroomMedia] Generated TTS: tts_s3_action_Y5hBQQ3v.mp3 (33408 bytes)
+[2026-09-11T18:15:02.790Z] [INFO] [ClassroomMedia] Generated TTS: tts_s3_action_P61_9H1_.mp3 (29808 bytes)
+[2026-09-11T18:15:04.184Z] [INFO] [ClassroomMedia] Generated TTS: tts_s3_action_sSX7fg3F.mp3 (43056 bytes)
+[2026-09-11T18:15:06.215Z] [INFO] [ClassroomMedia] Generated TTS: tts_s3_action_2cx9a5VS.mp3 (47808 bytes)
+[2026-09-11T18:15:08.038Z] [INFO] [ClassroomMedia] Generated TTS: tts_s4_action_ePn_8gKN.mp3 (60192 bytes)
+[2026-09-11T18:15:09.840Z] [INFO] [ClassroomMedia] Generated TTS: tts_s4_action_aRaH49Vg.mp3 (59328 bytes)
+[2026-09-11T18:15:11.878Z] [INFO] [ClassroomMedia] Generated TTS: tts_s4_action_lPO9uw97.mp3 (59904 bytes)
+[2026-09-11T18:15:14.203Z] [INFO] [ClassroomMedia] Generated TTS: tts_s4_action_wuJKG-XO.mp3 (75312 bytes)
+[2026-09-11T18:15:16.477Z] [INFO] [ClassroomMedia] Generated TTS: tts_s4_action_T6hp90I9.mp3 (65232 bytes)
+[2026-09-11T18:15:18.368Z] [INFO] [ClassroomMedia] Generated TTS: tts_s5_action_DYuc1IdE.mp3 (38160 bytes)
+[2026-09-11T18:15:19.901Z] [INFO] [ClassroomMedia] Generated TTS: tts_s5_action_vKL2ihn5.mp3 (30096 bytes)
+[2026-09-11T18:15:21.883Z] [INFO] [ClassroomMedia] Generated TTS: tts_s6_action_vEBF__ec.mp3 (57888 bytes)
+[2026-09-11T18:15:24.405Z] [INFO] [ClassroomMedia] Generated TTS: tts_s6_action_4HZDNeQ4.mp3 (94752 bytes)
+[2026-09-11T18:15:29.461Z] [INFO] [ClassroomMedia] Generated TTS: tts_s6_action__B-IG3WA.mp3 (77040 bytes)
+[2026-09-11T18:15:31.410Z] [INFO] [ClassroomMedia] Generated TTS: tts_s6_action_naqk7HOo.mp3 (64800 bytes)
+[2026-09-11T18:15:31.410Z] [INFO] [Classroom] TTS generation complete
+[2026-09-11T18:15:31.414Z] [INFO] [Classroom] Classroom persisted: PibRqblS9p, URL: http://localhost:3000/classroom/PibRqblS9p
+[2026-09-11T18:19:40.055Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render
+[2026-09-11T18:19:43.663Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:19:46.687Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:19:49.701Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:19:52.718Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:19:55.730Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:19:58.744Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:20:01.760Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:20:04.774Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:20:07.783Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:20:10.793Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:20:13.803Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:20:15.938Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/health
+[2026-09-11T18:20:16.810Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:20:19.817Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:20:22.825Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:20:25.836Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:20:28.849Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:20:31.862Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:20:34.872Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:20:37.880Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:20:40.888Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:20:43.896Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:20:46.907Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:20:49.918Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:20:52.926Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:20:55.959Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:20:58.969Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:21:01.979Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:21:04.989Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:21:07.995Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:21:11.037Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:21:14.047Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:21:17.056Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:21:20.062Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:21:23.071Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:21:26.078Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:21:29.088Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:21:32.096Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:21:35.105Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:21:38.114Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:21:41.629Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:21:45.632Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:21:49.632Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:21:53.629Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:21:57.629Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:22:01.629Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:22:05.627Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:22:09.629Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:22:13.632Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:22:17.632Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:22:21.632Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:22:25.630Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:22:29.628Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:22:33.629Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:22:37.118Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/health
+[2026-09-11T18:22:37.631Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:22:41.628Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:22:45.630Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:22:49.628Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:22:52.639Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:22:55.648Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:22:58.661Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:23:01.701Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:23:04.709Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:23:05.903Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/health
+[2026-09-11T18:23:07.720Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:23:10.726Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/c99e126c-4f53-4a18-8fd5-6b90008f8ea1
+[2026-09-11T18:23:19.101Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/health
+[2026-09-11T18:23:28.275Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render
+[2026-09-11T18:23:31.078Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render
+[2026-09-11T18:23:31.630Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/1e64704d-8516-48a3-81ee-b0c133e903d0
+[2026-09-11T18:23:34.554Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/25b72364-1087-48b6-86af-ba8f49fc23e3
+[2026-09-11T18:23:35.628Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/1e64704d-8516-48a3-81ee-b0c133e903d0
+[2026-09-11T18:23:37.561Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/25b72364-1087-48b6-86af-ba8f49fc23e3
+[2026-09-11T18:23:39.630Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/1e64704d-8516-48a3-81ee-b0c133e903d0
+[2026-09-11T18:23:40.573Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/25b72364-1087-48b6-86af-ba8f49fc23e3
+[2026-09-11T18:23:43.583Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/25b72364-1087-48b6-86af-ba8f49fc23e3
+[2026-09-11T18:23:43.628Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/1e64704d-8516-48a3-81ee-b0c133e903d0
+[2026-09-11T18:23:46.626Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/25b72364-1087-48b6-86af-ba8f49fc23e3
+[2026-09-11T18:23:47.630Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/1e64704d-8516-48a3-81ee-b0c133e903d0
+[2026-09-11T18:23:49.633Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/25b72364-1087-48b6-86af-ba8f49fc23e3
+[2026-09-11T18:23:50.640Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/1e64704d-8516-48a3-81ee-b0c133e903d0
+[2026-09-11T18:23:52.640Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/25b72364-1087-48b6-86af-ba8f49fc23e3
+[2026-09-11T18:23:53.649Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/1e64704d-8516-48a3-81ee-b0c133e903d0
+[2026-09-11T18:23:56.656Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/1e64704d-8516-48a3-81ee-b0c133e903d0
+[2026-09-11T18:23:59.665Z] [INFO] [ProxyFetch] No proxy configured, using direct fetch for: http://localhost:9000/render/1e64704d-8516-48a3-81ee-b0c133e903d0
+[2026-09-11T19:10:34.562Z] [INFO] [AgentRunner] runner e553aeb7:44912 stopped
+ ELIFECYCLE  Command failed with exit code 143.

@@ -40,7 +40,7 @@ const effect = (elementId: string): EffectSegment => ({
   durationMs: 100,
   elementId,
   geometry: null,
-  params: { dimness: 0.5 },
+  params: { dimness: 0.15 },
   degraded: false,
 });
 

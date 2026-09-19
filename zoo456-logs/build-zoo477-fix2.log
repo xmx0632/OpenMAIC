@@ -1,0 +1,358 @@
+
+> openmaic@1.0.1 build /Volumes/macext/code/demo/OpenMAIC
+> node scripts/assert-vendor-maic-importer.mjs && next build
+
+[assert-vendor] ok: public/vendor/maic-importer/index.js
+⚠ Warning: Next.js inferred your workspace root, but it may not be correct.
+ We detected multiple lockfiles and selected the directory of /Volumes/macext/code/demo/package-lock.json as the root directory.
+ To silence this warning, set `turbopack.root` in your Next.js config, or consider removing one of the lockfiles if it's not needed.
+   See https://nextjs.org/docs/app/api-reference/config/next-config-js/turbopack#root-directory for more information.
+ Detected additional lockfiles: 
+   * /Volumes/macext/code/demo/OpenMAIC/pnpm-workspace.yaml
+
+▲ Next.js 16.2.11 (Turbopack)
+- Environments: .env.local, .env
+- Experiments (use with caution):
+  · proxyClientMaxBodySize: "200mb"
+
+⚠ The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
+  Creating an optimized production build ...
+(node:85083) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:85086) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+Turbopack build encountered 10 warnings:
+./OpenMAIC/instrumentation.ts:97:3
+A Node.js API is used (process.once at line: 97) which is not supported in the Edge Runtime.
+    Learn more: https://nextjs.org/docs/api-reference/edge-runtime
+  [90m 95 |[0m   };
+  [90m 96 |[0m
+[31m[1m>[0m [90m 97 |[0m   process.once([32m'SIGTERM'[0m, () => [36mvoid[0m shutdown());
+  [90m    |[0m   [31m[1m^^^^^^^^^^^^[0m
+  [90m 98 |[0m   process.once([32m'SIGINT'[0m, () => [36mvoid[0m shutdown());
+  [90m 99 |[0m }
+  [90m100 |[0m
+
+Ecmascript file had an error
+
+Import trace:
+  App Route:
+    ./OpenMAIC/instrumentation.ts
+    ./OpenMAIC/lib/document/extractors/local-media.ts
+    ./OpenMAIC/lib/document/extractors/media-registry.ts
+    ./OpenMAIC/app/api/extract-document/route.ts
+
+
+./OpenMAIC/instrumentation.ts:98:3
+A Node.js API is used (process.once at line: 98) which is not supported in the Edge Runtime.
+    Learn more: https://nextjs.org/docs/api-reference/edge-runtime
+  [90m 96 |[0m
+  [90m 97 |[0m   process.once([32m'SIGTERM'[0m, () => [36mvoid[0m shutdown());
+[31m[1m>[0m [90m 98 |[0m   process.once([32m'SIGINT'[0m, () => [36mvoid[0m shutdown());
+  [90m    |[0m   [31m[1m^^^^^^^^^^^^[0m
+  [90m 99 |[0m }
+  [90m100 |[0m
+
+Ecmascript file had an error
+
+Import trace:
+  App Route:
+    ./OpenMAIC/instrumentation.ts
+    ./OpenMAIC/lib/document/extractors/local-media.ts
+    ./OpenMAIC/lib/document/extractors/media-registry.ts
+    ./OpenMAIC/app/api/extract-document/route.ts
+
+
+./OpenMAIC/next.config.ts
+Encountered unexpected file in NFT list
+A file was traced that indicates that the whole project was traced unintentionally. Somewhere in the import trace below, there are:
+- filesystem operations (like path.join, path.resolve or fs.readFile), or
+- very dynamic requires (like require('./' + foo)).
+To resolve this, you can
+- remove them if possible, or
+- only use them in development, or
+- make sure they are statically scoped to some subfolder: path.join(process.cwd(), 'data', bar), or
+- add ignore comments: path.join(/*turbopackIgnore: true*/ process.cwd(), bar)
+
+Import trace:
+  App Route:
+    ./OpenMAIC/next.config.ts
+    ./OpenMAIC/lib/document/extractors/local-media.ts
+    ./OpenMAIC/lib/document/extractors/media-registry.ts
+    ./OpenMAIC/app/api/extract-document/route.ts
+
+
+./OpenMAIC/next.config.ts
+Encountered unexpected file in NFT list
+A file was traced that indicates that the whole project was traced unintentionally. Somewhere in the import trace below, there are:
+- filesystem operations (like path.join, path.resolve or fs.readFile), or
+- very dynamic requires (like require('./' + foo)).
+To resolve this, you can
+- remove them if possible, or
+- only use them in development, or
+- make sure they are statically scoped to some subfolder: path.join(process.cwd(), 'data', bar), or
+- add ignore comments: path.join(/*turbopackIgnore: true*/ process.cwd(), bar)
+
+Output asset trace:
+  [output]/OpenMAIC/.next/server/app/api/agent/sessions/[id]/messages/route.js
+  [output]/OpenMAIC/.next/server/chunks/[root-of-the-server]__1t5wg6y._.js
+
+Import trace:
+  App Route:
+    ./OpenMAIC/next.config.ts
+    ./OpenMAIC/lib/document/extractors/local-media.ts
+    ./OpenMAIC/lib/document/extractors/media-registry.ts
+    ./OpenMAIC/app/api/extract-document/route.ts
+
+
+./OpenMAIC/next.config.ts
+Encountered unexpected file in NFT list
+A file was traced that indicates that the whole project was traced unintentionally. Somewhere in the import trace below, there are:
+- filesystem operations (like path.join, path.resolve or fs.readFile), or
+- very dynamic requires (like require('./' + foo)).
+To resolve this, you can
+- remove them if possible, or
+- only use them in development, or
+- make sure they are statically scoped to some subfolder: path.join(process.cwd(), 'data', bar), or
+- add ignore comments: path.join(/*turbopackIgnore: true*/ process.cwd(), bar)
+
+Output asset trace:
+  [output]/OpenMAIC/.next/server/app/api/generate/agent-profiles/route.js
+  [output]/OpenMAIC/.next/server/chunks/[root-of-the-server]__0er0gb1._.js
+
+Import trace:
+  App Route:
+    ./OpenMAIC/next.config.ts
+    ./OpenMAIC/lib/document/extractors/local-media.ts
+    ./OpenMAIC/lib/document/extractors/media-registry.ts
+    ./OpenMAIC/app/api/extract-document/route.ts
+
+
+./OpenMAIC/next.config.ts
+Encountered unexpected file in NFT list
+A file was traced that indicates that the whole project was traced unintentionally. Somewhere in the import trace below, there are:
+- filesystem operations (like path.join, path.resolve or fs.readFile), or
+- very dynamic requires (like require('./' + foo)).
+To resolve this, you can
+- remove them if possible, or
+- only use them in development, or
+- make sure they are statically scoped to some subfolder: path.join(process.cwd(), 'data', bar), or
+- add ignore comments: path.join(/*turbopackIgnore: true*/ process.cwd(), bar)
+
+Output asset trace:
+  [output]/OpenMAIC/.next/server/app/api/generate/scene-content/route.js
+  [output]/OpenMAIC/.next/server/chunks/[root-of-the-server]__1-7awaq._.js
+
+Import trace:
+  App Route:
+    ./OpenMAIC/next.config.ts
+    ./OpenMAIC/lib/document/extractors/local-media.ts
+    ./OpenMAIC/lib/document/extractors/media-registry.ts
+    ./OpenMAIC/app/api/extract-document/route.ts
+
+
+./OpenMAIC/next.config.ts
+Encountered unexpected file in NFT list
+A file was traced that indicates that the whole project was traced unintentionally. Somewhere in the import trace below, there are:
+- filesystem operations (like path.join, path.resolve or fs.readFile), or
+- very dynamic requires (like require('./' + foo)).
+To resolve this, you can
+- remove them if possible, or
+- only use them in development, or
+- make sure they are statically scoped to some subfolder: path.join(process.cwd(), 'data', bar), or
+- add ignore comments: path.join(/*turbopackIgnore: true*/ process.cwd(), bar)
+
+Output asset trace:
+  [output]/OpenMAIC/.next/server/app/api/pbl/v2/evaluate/route.js
+  [output]/OpenMAIC/.next/server/chunks/[root-of-the-server]__0yqa4pc._.js
+
+Import trace:
+  App Route:
+    ./OpenMAIC/next.config.ts
+    ./OpenMAIC/lib/document/extractors/local-media.ts
+    ./OpenMAIC/lib/document/extractors/media-registry.ts
+    ./OpenMAIC/app/api/extract-document/route.ts
+
+
+./OpenMAIC/next.config.ts
+Encountered unexpected file in NFT list
+A file was traced that indicates that the whole project was traced unintentionally. Somewhere in the import trace below, there are:
+- filesystem operations (like path.join, path.resolve or fs.readFile), or
+- very dynamic requires (like require('./' + foo)).
+To resolve this, you can
+- remove them if possible, or
+- only use them in development, or
+- make sure they are statically scoped to some subfolder: path.join(process.cwd(), 'data', bar), or
+- add ignore comments: path.join(/*turbopackIgnore: true*/ process.cwd(), bar)
+
+Output asset trace:
+  [output]/OpenMAIC/.next/server/app/api/pbl/v2/instructor/route.js
+  [output]/OpenMAIC/.next/server/chunks/[root-of-the-server]__04wkdjm._.js
+
+Import trace:
+  App Route:
+    ./OpenMAIC/next.config.ts
+    ./OpenMAIC/lib/document/extractors/local-media.ts
+    ./OpenMAIC/lib/document/extractors/media-registry.ts
+    ./OpenMAIC/app/api/extract-document/route.ts
+
+
+./OpenMAIC/next.config.ts
+Encountered unexpected file in NFT list
+A file was traced that indicates that the whole project was traced unintentionally. Somewhere in the import trace below, there are:
+- filesystem operations (like path.join, path.resolve or fs.readFile), or
+- very dynamic requires (like require('./' + foo)).
+To resolve this, you can
+- remove them if possible, or
+- only use them in development, or
+- make sure they are statically scoped to some subfolder: path.join(process.cwd(), 'data', bar), or
+- add ignore comments: path.join(/*turbopackIgnore: true*/ process.cwd(), bar)
+
+Output asset trace:
+  [output]/OpenMAIC/.next/server/app/api/verify-model/route.js
+  [output]/OpenMAIC/.next/server/chunks/[root-of-the-server]__1mqwo5p._.js
+
+Import trace:
+  App Route:
+    ./OpenMAIC/next.config.ts
+    ./OpenMAIC/lib/document/extractors/local-media.ts
+    ./OpenMAIC/lib/document/extractors/media-registry.ts
+    ./OpenMAIC/app/api/extract-document/route.ts
+
+
+./OpenMAIC/next.config.ts
+Encountered unexpected file in NFT list
+A file was traced that indicates that the whole project was traced unintentionally. Somewhere in the import trace below, there are:
+- filesystem operations (like path.join, path.resolve or fs.readFile), or
+- very dynamic requires (like require('./' + foo)).
+To resolve this, you can
+- remove them if possible, or
+- only use them in development, or
+- make sure they are statically scoped to some subfolder: path.join(process.cwd(), 'data', bar), or
+- add ignore comments: path.join(/*turbopackIgnore: true*/ process.cwd(), bar)
+
+Output asset trace:
+  [output]/OpenMAIC/.next/server/app/api/web-search/route.js
+  [output]/OpenMAIC/.next/server/chunks/[root-of-the-server]__0819ug5._.js
+
+Import trace:
+  App Route:
+    ./OpenMAIC/next.config.ts
+    ./OpenMAIC/lib/document/extractors/local-media.ts
+    ./OpenMAIC/lib/document/extractors/media-registry.ts
+    ./OpenMAIC/app/api/extract-document/route.ts
+
+
+✓ Compiled successfully in 29.3s
+  Running TypeScript ...
+  Finished TypeScript in 26.0s ...
+  Collecting page data using 9 workers ...
+[2026-09-12T03:48:20.972Z] [WARN] [PersistenceAuth] Persistence is running the development authenticator in production: it provides no user isolation, so this endpoint must only be reachable on a trusted network. Replace it with real session verification before serving public traffic.
+[2026-09-12T03:48:21.113Z] [WARN] [PersistenceAuth] Persistence is running the development authenticator in production: it provides no user isolation, so this endpoint must only be reachable on a trusted network. Replace it with real session verification before serving public traffic.
+[2026-09-12T03:48:21.128Z] [WARN] [PersistenceAuth] Persistence is running the development authenticator in production: it provides no user isolation, so this endpoint must only be reachable on a trusted network. Replace it with real session verification before serving public traffic.
+(node:85209) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:85211) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[2026-09-12T03:48:21.291Z] [WARN] [PersistenceAuth] Persistence is running the development authenticator in production: it provides no user isolation, so this endpoint must only be reachable on a trusted network. Replace it with real session verification before serving public traffic.
+(node:85210) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  Generating static pages using 9 workers (0/52) ...
+  Generating static pages using 9 workers (13/52) 
+(node:85213) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[2026-09-12T03:48:21.530Z] [WARN] [PersistenceAuth] Persistence is running the development authenticator in production: it provides no user isolation, so this endpoint must only be reachable on a trusted network. Replace it with real session verification before serving public traffic.
+  Generating static pages using 9 workers (26/52) 
+(node:85205) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  Generating static pages using 9 workers (39/52) 
+(node:85212) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✓ Generating static pages using 9 workers (52/52) in 333ms
+  Finalizing page optimization ...
+
+Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ƒ /api/access-code/status
+├ ƒ /api/access-code/verify
+├ ƒ /api/agent/owner-events
+├ ƒ /api/agent/runtime
+├ ƒ /api/agent/sessions
+├ ƒ /api/agent/sessions/[id]
+├ ƒ /api/agent/sessions/[id]/cancel
+├ ƒ /api/agent/sessions/[id]/events
+├ ƒ /api/agent/sessions/[id]/messages
+├ ƒ /api/agent/sessions/status
+├ ƒ /api/agent/skills
+├ ƒ /api/agent/skills/[id]
+├ ƒ /api/azure-voices
+├ ƒ /api/chat
+├ ƒ /api/chat/pi
+├ ƒ /api/chat/pi/whiteboard-visibility
+├ ƒ /api/classroom
+├ ƒ /api/classroom-media/[classroomId]/[...path]
+├ ƒ /api/comfyui-workflows
+├ ƒ /api/export-video/capability
+├ ƒ /api/export-video/render
+├ ƒ /api/export-video/render/[jobId]
+├ ƒ /api/export-video/render/[jobId]/download
+├ ƒ /api/extract-document
+├ ƒ /api/folders
+├ ƒ /api/folders/[id]
+├ ƒ /api/folders/members
+├ ƒ /api/generate-classroom
+├ ƒ /api/generate-classroom/[jobId]
+├ ƒ /api/generate/agent-profiles
+├ ƒ /api/generate/image
+├ ƒ /api/generate/scene-actions
+├ ƒ /api/generate/scene-content
+├ ƒ /api/generate/scene-outlines-stream
+├ ƒ /api/generate/tts
+├ ƒ /api/generate/video
+├ ƒ /api/generate/voice
+├ ƒ /api/health
+├ ƒ /api/materials
+├ ƒ /api/materials/[id]
+├ ƒ /api/parse-pdf
+├ ƒ /api/pbl/v2/evaluate
+├ ƒ /api/pbl/v2/instructor
+├ ƒ /api/pbl/v2/open-task
+├ ƒ /api/pbl/v2/simulator
+├ ƒ /api/pbl/v2/task/update
+├ ƒ /api/persistence/[...path]
+├ ƒ /api/provider/probe-models
+├ ƒ /api/proxy-media
+├ ƒ /api/quiz-grade
+├ ƒ /api/server-providers
+├ ƒ /api/skills/[id]
+├ ƒ /api/stage-meta/[stageId]
+├ ƒ /api/stages
+├ ƒ /api/stages/[id]
+├ ƒ /api/stages/[id]/freshness
+├ ƒ /api/stages/[id]/generation-complete
+├ ƒ /api/stages/[id]/manifest
+├ ƒ /api/stages/[id]/publish
+├ ƒ /api/stages/[id]/scenes
+├ ƒ /api/stages/[id]/status
+├ ƒ /api/stages/[id]/unpublish
+├ ƒ /api/transcription
+├ ƒ /api/usage
+├ ƒ /api/verify-image-provider
+├ ƒ /api/verify-model
+├ ƒ /api/verify-pdf-provider
+├ ƒ /api/verify-video-provider
+├ ƒ /api/web-search
+├ ○ /apple-icon.png
+├ ƒ /classroom/[id]
+├ ○ /eval/whiteboard
+├ ƒ /generation-preview
+├ ƒ /workbench/new
+└ ƒ /workspace
+
+
+ƒ Proxy (Middleware)
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+

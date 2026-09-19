@@ -20,6 +20,18 @@ export function getPersistenceLearnerKey(): Promise<string> {
   if (!isBrowserPersistenceEnabled()) {
     return Promise.reject(new Error('Browser persistence is not enabled'));
   }
+  // ZOO-477: pin the learner partition key for single-user deployments. The
+  // default per-device anonymous key (KV `device` scope, minted per browser
+  // profile) partitions runtime sessions — chat/voice-interaction data — per
+  // browser, so the same course loses its below-video TTS session info in
+  // every other browser. A pinned key makes every browser (incognito or not)
+  // resolve the same partition; the server's requireLearner check passes
+  // because header, URL path and session ids all derive from this one value.
+  // Multi-user deployments must leave this unset (a shared key would merge
+  // several learners' runtime into one partition) and wait for sign-in +
+  // RuntimeStore.mergeLearner instead.
+  const pinned = process.env.NEXT_PUBLIC_LEARNER_KEY_OVERRIDE?.trim();
+  if (pinned) return Promise.resolve(pinned);
   return (learnerKeyPromise ??= getLearnerKey((deviceKv ??= new BrowserKVStore())).catch(
     (error) => {
       learnerKeyPromise = undefined;

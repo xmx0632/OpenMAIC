@@ -319,7 +319,9 @@ export class ActionEngine {
 
   private executeSpotlight(action: SpotlightAction): void {
     useCanvasStore.getState().setSpotlight(action.elementId, {
-      dimness: action.dimOpacity ?? 0.5,
+      // ZOO-551: 0.5 read as "screen goes almost black" on dense slides —
+      // 0.15 keeps the focus cue without drowning the frame.
+      dimness: action.dimOpacity ?? 0.15,
     });
     this.scheduleEffectClear();
   }

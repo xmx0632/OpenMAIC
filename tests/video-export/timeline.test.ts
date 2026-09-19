@@ -92,7 +92,8 @@ describe('buildTimeline — effects', () => {
 
   it('carries descriptor default params when the action has no override', () => {
     const tl = buildTimeline([slide('s', [spotlight('sp', 'e1')])], buildTimelineOptions(NO_PROBE));
-    expect(tl.scenes[0].effects[0].params).toEqual({ dimness: 0.5 });
+    // ZOO-551: descriptor default lowered 0.5 -> 0.15
+    expect(tl.scenes[0].effects[0].params).toEqual({ dimness: 0.15 });
   });
 
   it('merges authored spotlight dimOpacity and laser color overrides into params', () => {

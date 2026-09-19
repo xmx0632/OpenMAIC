@@ -416,7 +416,8 @@ const useCanvasStoreBase = create<CanvasState>((set, get) => ({
       spotlightMode: 'pixel',
       spotlightOptions: {
         radius: 200,
-        dimness: 0.7,
+        // ZOO-551: align with authored spotlight dimOpacity norm (0.15)
+        dimness: 0.15,
         transition: 300,
         ...options,
       },
@@ -430,7 +431,8 @@ const useCanvasStoreBase = create<CanvasState>((set, get) => ({
       spotlightMode: 'percentage',
       spotlightPercentageGeometry: geometry,
       spotlightOptions: {
-        dimness: 0.7,
+        // ZOO-551: align with authored spotlight dimOpacity norm (0.15)
+        dimness: 0.15,
         transition: 300,
         ...options,
       },
