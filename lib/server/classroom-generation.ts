@@ -57,6 +57,8 @@ export interface GenerateClassroomInput {
   enableVideoGeneration?: boolean;
   enableTTS?: boolean;
   agentMode?: 'default' | 'generate';
+  /** 运行时 TTS 音色覆盖（如 vv-xinran / vv-bowen / alloy），优先于 TTS_VOICE 环境变量与默认值 */
+  ttsVoice?: string;
 }
 
 export type ClassroomGenerationStep =
@@ -693,7 +695,7 @@ export async function generateClassroom(
     });
 
     try {
-      await generateTTSForClassroom(scenes, stageId, options.baseUrl);
+      await generateTTSForClassroom(scenes, stageId, options.baseUrl, input.ttsVoice);
       log.info('TTS generation complete');
     } catch (err) {
       log.warn('TTS generation phase failed, continuing:', err);

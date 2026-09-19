@@ -33,6 +33,7 @@ export async function POST(req: NextRequest) {
         : {}),
       ...(rawBody.enableTTS != null ? { enableTTS: rawBody.enableTTS } : {}),
       ...(rawBody.agentMode ? { agentMode: rawBody.agentMode } : {}),
+      ...(rawBody.ttsVoice ? { ttsVoice: String(rawBody.ttsVoice).slice(0, 64) } : {}),
     };
     const { requirement } = body;
 

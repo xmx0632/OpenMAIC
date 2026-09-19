@@ -42,3 +42,14 @@
 - VibeVoice 代码库（含 Mac 补丁）：https://gitee.com/xmx0632/vibe-voice
 - 1.5B 权重（5GB）+ Qwen2.5 分词器缓存（部署见该仓库 SETUP-ZH.md）
 - ffmpeg（wav 转 mp3）
+
+## 运行时切换音色（免重启）
+
+生成请求体加 `ttsVoice` 字段即可，优先级：请求参数 > 环境变量 TTS_VOICE > 提供商默认（alloy）。
+
+```bash
+curl -X POST /api/generate-classroom -d '{...,"ttsVoice":"vv-xinran"}'
+# openmaic-video-gen 脚本：--flags '{"ttsVoice":"vv-bowen"}'
+```
+
+可用值：alloy 等 Edge 音色；vv-xinran / vv-bowen / vv-anchen（VibeVoice）；vv-<自定义克隆音色>。
