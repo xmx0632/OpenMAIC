@@ -153,6 +153,10 @@ VV_VOICE_MAP = {
     "vv-anchen": "zh-Anchen_man_bgm",
 }
 _VV = {"model": None, "processor": None, "lock": __import__("threading").Lock()}
+# 生成串行锁（2026-09-20 根治并发崩溃）：全局同一时刻只允许一个 VibeVoice 生成。
+# 并发叠跑曾在双课堂重叠时打爆内存（abort 134），排队等待的请求只占线程栈内存，安全。
+# 前提：openMAIC 侧需 TTS_REQUEST_TIMEOUT_MS 调大（排队等待也计入其请求超时）。
+_VV_GEN_LOCK = __import__("threading").Lock()
 
 # VibeVoice 官方建议：中文用英文标点，服务端自动归一化
 _PUNCT_MAP = str.maketrans({
@@ -222,6 +226,15 @@ def vv_generate(text: str, voice: str) -> bytes:
         )
 
     text = "Speaker 1: " + text.strip().translate(_PUNCT_MAP)
+    # 串行锁包住 编码+生成+解码 全程（不只是 generate）：processor 编码也吃内存
+    with _VV_GEN_LOCK:
+        return _vv_generate_locked(text, voice_wav)
+
+
+def _vv_generate_locked(text: str, voice_wav: str) -> bytes:
+    import numpy as np
+    import torch
+
     inputs = _VV["processor"](
         text=[text],
         voice_samples=[[voice_wav]],

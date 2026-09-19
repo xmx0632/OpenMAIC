@@ -77,4 +77,4 @@ BGM 不是功能，是烧在样音文件里的：`zh-Anchen_man_bgm.wav` 本身�
 2. 崩溃后重启失败（exit 1）= 内存未回收，等 1-2 分钟再试
 3. 本服务无自动重启机制（无 launchd/crontab），崩了要手动拉起：
    `cd openmaic/scripts && nohup /path/to/VibeVoice/venv/bin/python edge-tts-server.py > /tmp/tts-server.log 2>&1 &`
-4. 长期根治（生成串行锁 + KeepAlive）需改代码，待定
+4. ~~长期根治（生成串行锁）~~ **已于 2026-09-20 实施**：`_VV_GEN_LOCK` 串行锁包住 编码+生成+解码 全程，全局同一时刻仅一个 VibeVoice 生成，其余 FIFO 排队（排队只占线程栈内存，安全）。实测 3 并发请求 27.9/38.6/48.6s 交错完成、全部成功。**配套**：openMAIC `.env.local` 已加 `TTS_REQUEST_TIMEOUT_MS=600000`（排队等待计入请求超时，30s 默认值会误杀排队片段）。运行纪律第 1 条（同时只跑一个 vv 课程）仍建议遵守——串行锁保不崩，但两个课会互相拖慢
