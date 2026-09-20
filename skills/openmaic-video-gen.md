@@ -16,7 +16,7 @@ license: MIT
 ## 服务与环境（已验证事实，直接用）
 
 - 本机服务 `http://localhost:3000`（OpenMAIC v1.0.1，`/Volumes/macext/code/demo/OpenMAIC`），默认模型 GLM `glm-5.3-flash`（超时已修复，ZOO-456），健康检查 `GET /api/health`
-- 生成 API：`POST /api/generate-classroom`，body `{requirement, enableTTS, enableImageGeneration, enableVideoGeneration, enableWebSearch}` → 202 返回 `{jobId, pollUrl}`；轮询 pollUrl 30~60s 一次，`done:true`（或 `status:succeeded`）时 `result.url` 为课堂地址。**默认 `enableImageGeneration: true`**（ZOO-511 起接入硅基流动 Kwai-Kolors/Kolors，服务端已限流 2 张/分钟；关闭用 `--flags '{"enableImageGeneration":false}'`）
+- 生成 API：`POST /api/generate-classroom`，body `{requirement, enableTTS, enableImageGeneration, enableVideoGeneration, enableWebSearch}` → 202 返回 `{jobId, pollUrl}`；轮询 pollUrl 30~60s 一次，`done:true`（或 `status:succeeded`）时 `result.url` 为课堂地址。**默认 `enableImageGeneration: true`**（ZOO-511 起接入硅基流动 Kwai-Kolors/Kolors，服务端已限流 2 张/分钟；关闭用 `--flags '{"enableImageGeneration":false}'`）。**配图由绘图codex 外部提供的流程（ZOO-515 默认）提交时必须显式传该 flags**——脚本默认 true 会混入内置生成图，F28（ZOO-756）曾因此占位图残留成片、被大类验收退回
 - 耗时基线：单场景 4~8 分钟，6~7 场景课堂全程约 30 分钟；**开配图时媒体阶段每张间隔 ≥33 秒串行生成（2 IPM 限流），10 页课程约多 5~6 分钟，属正常不要当成卡死**；**单 job 上限 45 分钟；严格串行，一次只跑一个 job**
 - MP4 渲染：`GET /api/export-video/capability` 返回 `enabled:true` 时可用（渲染走课堂 ZIP 上传 `/api/export-video/render`，由课堂页自动完成）；渲染时长≈课堂时长
 - **PPTX 无服务端端点**（pptxgenjs 浏览器端组装），MP4 的导出 ZIP 也在浏览器端组装——所以导出一律用 playwright 驱动课堂页点按钮，不要试图复刻前端请求
@@ -55,6 +55,10 @@ TTS_VOICE=vv-xinran
 
 注意：VibeVoice 音色首次请求约 40s 模型加载（之后常驻约 5GB 内存），单条生成约为音频时长 2 倍；整课 TTS 阶段会比 Edge 慢数分钟，属正常。Edge 音色适合快速迭代，VibeVoice 适合最终成片。
 
+## 版本同步（改本 skill 后必做）
+
+本 skill 另有一份仓库存档副本：`/Volumes/macext/code/demo/OpenMAIC/skills/openmaic-video-gen.md`（自述头两行 + 正文镜像）。**每次修改 SKILL.md 或 scripts 后，把正文同步过去**（保留存档说明头），避免两边漂移。
+
 ## 一句话用法
 
 ```bash
@@ -74,6 +78,7 @@ node openmaic-video.mjs all --requirement-file /tmp/req.txt
 3. **轮询**：30s 间隔，超 45 分钟判超时
 4. **场景类型校验**（合规红线）：`GET /api/classroom?id=<id>` 读 `scenes[].type`，**必须全部为 `slide`**；发现 `quiz`/`interactive`/`pbl` → 脚本退出码 3，视为不合规需重生成（见下）。同时报告配图覆盖（X/Y 页有插图）；开启配图却为 0 张时打警告（多为硅基流动日额度耗尽，课程仍可用）
 5. **聚光灯 soften（ZOO-551 起强制）**：脚本在校验后、任何页面访问/导出前，自动给全部 spotlight 动作写入 `dimOpacity=0.15`（幂等，双存储同步）。背景：默认 0.5 的暗幕在知识点高亮时画面大面积过暗，用户明确要求全线路按 0.15。openMAIC 侧默认值（引擎/描述符/store）已于 ZOO-551 一并改为 0.15 并重建，此处是数据级保险带；**不要用 `--no-constraints` 之类的方式绕过，也不要手工改回高暗度**
+6. **TTS 读音校验（2026-09-20 起强制；仅 vv-\* VibeVoice 音色需要，Edge 音色跳过）**：本集口播用 vv-\* 时，导出前跑 `./scripts/tts-verify.py --classroom <id> --fix --voice <本集音色>`（whisper-medium 转写 + 拼音音节比对，坏 take 自动重录换掉，详见下文专节）；校验不过不导出，换过 take 必须重跑 export。Edge 音色（alloy/晓晓等）为确定性合成、无随机坏 take 模式，**不需要本步骤**
 7. **截图质检**：第 1 页（封面）+ 最后一页（结尾）viewport 截图，供人工确认封面/结尾页质量
 8. **导出 PPTX**：课堂页右上角导出菜单第一项「导出 PPTX」，捕获浏览器下载
 9. **导出 MP4**：菜单「导出视频」→ 弹窗「渲染 MP4」（默认 1080p/30fps/标准），等渲染完成捕获下载
@@ -99,6 +104,19 @@ requirement 头部固定拼接以下约束块（`--no-constraints` 仅限调试�
 
 需求正文写法见 `templates/requirement-template.md`（场景数上限要写"含封面与结尾页"）。
 
+## TTS 读音校验（tts-verify，2026-09-20 起新增）
+
+```bash
+./scripts/tts-verify.py --classroom <id> [--fix] [--voice vv-xinran] [--takes 3] [--limit N] [--model medium]
+# 共享 venv（/Volumes/macext/code/demo/tools/asr-venv）缺失时脚本自动引导安装（约 1 分钟，仅首次）
+```
+
+- **为什么**：VibeVoice 是扩散式生成 TTS，同一文本多次合成结果随机，偶发整段发糊/音节粘连/句尾杂音的坏 take（文本管线正确也会发生；F29 实测同句文字出现过 3.1s 与 5.0s 两个版本、4.8s 与 13s 失控版）。符号变音与数字念英文属文本管线问题，已在 8500 服务修复；采样坏 take 只能合成后校验兜住
+- **怎么做**：whisper-medium 逐条转写课堂口播 mp3 → 与口播文本做**拼音音节级**比对（同音字转写差异不算错）→ 差异率超 15% 判坏；`--fix` 时对坏条目重录 `--takes` 个 take、逐个 ASR 复验，自动用零/最低差异 take 覆盖课堂音频文件（内含时长/字数 >0.55s/字 的失控看门狗；2026-09-20 G52 教训：**选 take 优先「rate 达标且语速在 0.17–0.33s/字 正常带」的理想 take 直接采用**——ASR 内容全对但语速拖到 0.39–0.45s/字 的慢速 take 会漏过 0.55 看门狗，人耳一听就是毛病）
+- **纪律**：只有 vv-\*（VibeVoice）音色需要本步骤，出片前必跑 `--fix`；换过 take 的课堂必须重新 export 才进成片。Edge 音色（alloy/晓晓等）确定性合成、无坏 take 模式，直接跳过 tts-verify
+- **局限（如实）**：ASR 非金标准，声调级细微出入判不了；「校验通过」= 把坏 take 概率压到极低（坏 take × ASR 漏检的交集），最终验收仍靠人耳抽查
+- 报告落 `tts-verify-report.json`（每条 rate/asr/fixed），随交付证据引用
+
 ## 场景不合规时的重生成策略
 
 退出码 3 = 场景清单里有非 slide 类型。重生成前：
@@ -121,6 +139,7 @@ requirement 头部固定拼接以下约束块（`--no-constraints` 仅限调试�
 | 下载卡住超时 | MP4 渲染上限默认 40 分钟（`--render-timeout-min` 可调）；确认渲染服务活着再重试，**勿对同一课堂并发发起多个渲染** |
 | MP4 渲染完成但文件没落到 /Volumes/macext/downloads | 两种情况：① 后台/沙箱 run 对工作目录之外的写入会被虚拟化丢弃——**导出落盘一律在前台 shell 执行，或 `--out-dir` 指到 workdir 内再前台 `cp` 到 /Volumes/macext/downloads**；交付前用独立的前台 `ls` 验证文件真实存在。② 渲染产物还在服务端：从服务日志找本次 render job 的 UUID（`grep -oE "render/[a-f0-9-]{36}" zoo456-logs/server.log | tail`），直接 `curl http://localhost:3000/api/export-video/render/<UUID>/download -o /Volumes/macext/downloads/<命名>.mp4` 找回，不必重渲染 |
 | PPTX 丢了要重导 | PPTX 是浏览器端组装、服务端无存档，只能重跑：`node openmaic-video.mjs export --url <课堂地址> --skip-mp4`（约 1 分钟，不重新渲染 MP4） |
+| 重导出后 PPTX/MP4 里图片消失（无图版） | 课堂页被访问过后 persistence 文档库与文件库是双存储：改嵌图/换图 URL 后必须**同步 persistence 文档库**，否则页面按文档库旧 URL 渲染、跨域取图失败产出无图成品（ZOO-756 v2 的 f28-urlswap.mjs 已内置同步，复用该模式） |
 | 提交前不确定是否有别的 job 在跑 | `tail /Volumes/macext/code/demo/OpenMAIC/zoo456-logs/server.log`：以 `Generated N scene outlines (… courseTitle: <名>)` 行认 job（带课程名，可区分是哪个课堂），再看其后有无该 job 的 `succeeded/failed`；最近 45 分钟内有未完结的 outlines 行 → 有 job 在跑，等它结束。**注意 `render/<uuid>` 下载轮询行是 MP4 渲染不是生成，不能当作生成活跃的证据**（ZOO-576 曾因此误判并行） |
 
 ## 串行与成本纪律
