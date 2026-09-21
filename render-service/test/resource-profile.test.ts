@@ -18,7 +18,7 @@ describe('resource profiles', () => {
       maxConcurrentExtractions: 1,
       maxPreviewPixels: 3840 * 2160,
       maxPreviewDeviceScaleFactor: 2,
-      minimumMemoryBytes: 8 * GIB,
+      minimumMemoryBytes: 6 * GIB,
     });
     expect(env).toMatchObject({
       PRODUCER_MAX_WORKERS: '1',
@@ -110,11 +110,11 @@ describe('resource profiles', () => {
     const standard = resolveResourceProfile({ RENDER_RESOURCE_PROFILE: 'standard' });
     expect(() =>
       validateResourceProfileStartup(standard, {
-        memoryBytes: 7 * GIB,
+        memoryBytes: 5 * GIB,
         headlessShellPath: '/chromium-headless-shell',
         pathExists: () => true,
       }),
-    ).toThrow(/requires at least 8 GiB memory/);
+    ).toThrow(/requires at least 6 GiB memory/);
 
     const lowMemory = resolveResourceProfile({ RENDER_RESOURCE_PROFILE: 'low-memory' });
     expect(() => validateResourceProfileStartup(lowMemory, { memoryBytes: 3 * GIB })).toThrow(

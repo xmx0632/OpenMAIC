@@ -53,7 +53,11 @@ function defineProfile(
 }
 
 const PROFILES: Record<ResourceProfileName, ResourceProfile> = {
-  standard: defineProfile('standard', 'prefer-beginframe', 8 * GIB, 4),
+  // Standard's floor is 6 GiB, not the historical 8 GiB: measured peak for the
+  // one-render/one-worker shape is ~1.4-1.8 GiB (ZOO-809 A/B, 1080p30 slide
+  // compositions), leaving >3x headroom while fitting an 8 GiB Docker VM
+  // (MemTotal ~7.7 GiB) that keeps host memory free for other services.
+  standard: defineProfile('standard', 'prefer-beginframe', 6 * GIB, 4),
   'low-memory': defineProfile('low-memory', 'screenshot-only', 4 * GIB, 1),
   // Native macOS deployment: same shape as standard, but Chromium composites via
   // ANGLE/Metal (real host GPU) instead of SwiftShader, and the render config

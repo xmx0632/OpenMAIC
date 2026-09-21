@@ -67,6 +67,10 @@ services:
       start_period: 5s
     volumes:
       - openmaic-postgres:/var/lib/postgresql/data
+    # ZOO-809: hard cap for the persistence DB (observed usage <100 MiB) so the
+    # render container owns the VM's memory budget; postgres must never balloon
+    # into the render headroom.
+    mem_limit: 512m
     restart: unless-stopped
 
   # Isolated MP4 render service (Node 22 + Chromium + FFmpeg) for classroom video
