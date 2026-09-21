@@ -7,12 +7,16 @@
   Edge 引擎（默认，免费秒出）：
     alloy/nova/shimmer/... 见下方 VOICE_MAP（中文神经语音）
 
-  VibeVoice 引擎（本地大模型，质量高，RTF 约 2x，首次加载约 40s）：
+  VibeVoice 引擎（本地大模型，质量高，RTF 约 2x，worker 冷加载约 30-40s）：
     vv-xinran   → zh-Xinran_woman  中文女声，清晰自然（推荐）
     vv-bowen    → zh-Bowen_man     中文男声，沉稳
     vv-anchen   → zh-Anchen_man_bgm 中文男声，带 BGM 氛围
     vv-<自定义名> → demo/voices/<自定义名>.wav（语音克隆：放 5-10s 清晰人声
                    样音即可作为新音色，详见 VibeVoice 仓库 VOICES-ZH.md）
+
+  ZOO-833 子进程化（2026-09-22）：生成在独立 worker 进程（vv_worker.py）中进行，
+  模型常驻 ~6.8GB 的问题随之根治——worker 空闲自动退出，进程退出即全额归还内存；
+  本服务进程只做路由，不再 import torch，常驻 footprint ~80MB。
 
 用法（必须用 VibeVoice 的 venv 启动，两引擎共用）：
   /path/to/VibeVoice/venv/bin/python edge-tts-server.py     # 监听 8500
@@ -22,11 +26,18 @@
   VIBEVOICE_DIR   VibeVoice 代码目录（默认本机路径）
   VIBEVOICE_MODEL 1.5B 权重目录（默认本机路径）
   VIBEVOICE_DISABLED=1  禁用 VibeVoice 引擎（纯 edge 模式，用系统 python 即可）
+  VV_IDLE_UNLOAD_SEC=900   vv worker 空闲多少秒自动退出（默认 15 分钟）
+  VV_REQUEST_TIMEOUT_SEC=1200  单次 vv 生成的父进程侧超时（防 worker 卡死）
 
 注意：VibeVoice 引擎忽略 speed 参数（Edge 引擎保持 1.25x 固定倍率）。
 """
 import io
+import json
 import os
+import subprocess
+import sys
+import threading
+import time
 
 import edge_tts
 import uvicorn
@@ -130,21 +141,35 @@ async def speech(req: SpeechRequest):
 
 @app.get("/health")
 async def health():
+    p = _VV_WORKER["proc"]
+    alive = p is not None and p.poll() is None
+    idle = int(time.time() - _VV_WORKER["last_active"]) if alive else None
     return {
         "status": "ok",
         "provider": "edge-tts + vibevoice",
-        "vibevoice": {"enabled": not VIBEVOICE_DISABLED, "loaded": _VV["model"] is not None},
+        "vibevoice": {
+            "enabled": not VIBEVOICE_DISABLED,
+            "mode": "subprocess",
+            "loaded": alive,  # 兼容旧字段名：worker 存活即"模型可用"
+            "worker_running": alive,
+            "worker_pid": p.pid if alive else None,
+            "worker_idle_sec": idle,
+        },
         "vibevoice_voices": ["vv-xinran", "vv-bowen", "vv-anchen", "vv-<自定义克隆音色>"],
     }
 
 
 # ---------------------------------------------------------------------------
 # VibeVoice 引擎（本地 1.5B 大模型 TTS + 零样本克隆）
-# 懒加载：首个 vv-* 请求才初始化（约 40s，常驻约 5GB 内存）
+# ZOO-833（2026-09-22）子进程化：生成在 vv_worker.py 独立进程中进行，
+# 本进程不 import torch（常驻 ~80MB）；worker 空闲自动退出，内存随进程全额归还。
+# 文本预处理（标点兼容 + 数字归一化）随模型一并迁入 worker。
 # ---------------------------------------------------------------------------
 VIBEVOICE_DISABLED = os.environ.get("VIBEVOICE_DISABLED") == "1"
 VIBEVOICE_DIR = os.environ.get("VIBEVOICE_DIR", "/Volumes/macext/code/demo/VibeVoice")
 VIBEVOICE_MODEL = os.environ.get("VIBEVOICE_MODEL", "/Volumes/macext/llm-model/models/VibeVoice-1.5B")
+VV_IDLE_UNLOAD_SEC = int(os.environ.get("VV_IDLE_UNLOAD_SEC", "900"))
+VV_REQUEST_TIMEOUT_SEC = float(os.environ.get("VV_REQUEST_TIMEOUT_SEC", "1200"))
 
 # OpenAI 音色名 → VibeVoice 内置音色
 VV_VOICE_MAP = {
@@ -152,56 +177,12 @@ VV_VOICE_MAP = {
     "vv-bowen": "zh-Bowen_man",
     "vv-anchen": "zh-Anchen_man_bgm",
 }
-_VV = {"model": None, "processor": None, "lock": __import__("threading").Lock()}
-# 生成串行锁（2026-09-20 根治并发崩溃）：全局同一时刻只允许一个 VibeVoice 生成。
-# 并发叠跑曾在双课堂重叠时打爆内存（abort 134），排队等待的请求只占线程栈内存，安全。
-# 前提：openMAIC 侧需 TTS_REQUEST_TIMEOUT_MS 调大（排队等待也计入其请求超时）。
-_VV_GEN_LOCK = __import__("threading").Lock()
-
-# VibeVoice 官方建议：中文用英文标点，服务端自动归一化
-_PUNCT_MAP = str.maketrans({
-    "，": ",", "。": ".", "！": "!", "？": "?", "；": ";", "：": " ",
-    "（": " ", "）": " ", "「": " ", "」": " ", "“": " ", "”": " ",
-})
-
-# 数字归一化（2026-09-20）：VibeVoice 训练/推理均不做 text normalization（官方 FAQ Q3），
-# 阿拉伯数字与 % 会被念成英文（1977 → "nineteen seventy-seven"，77% → 英文）。
-# 中文旁白场景统一在服务端转汉字；Edge 引擎自带归一化，不走这段。
-import re as _re
-
-_DIGITS_CN = "零一二三四五六七八九"
-
-
-def _cn_num(num_str: str) -> str:
-    """权位读法（77→七十七，3.5→三点五），cn2an 失败时原样返回。"""
-    try:
-        from cn2an import an2cn
-
-        return an2cn(num_str)
-    except Exception:
-        return num_str
-
-
-def normalize_numbers(text: str) -> str:
-    # 1) 年份：恰好 4 位数字+「年」→ 逐位读（1977年 → 一九七七年）
-    text = _re.sub(
-        r"(?<![0-9])(\d{4})年",
-        lambda m: "".join(_DIGITS_CN[int(c)] for c in m.group(1)) + "年",
-        text,
-    )
-    # 2) 百分比：77% → 百分之七十七
-    text = _re.sub(r"(\d+(?:\.\d+)?)%", lambda m: "百分之" + _cn_num(m.group(1)), text)
-    # 3) 其余数字（含小数）→ 权位读法；紧邻英文字母的不动（GPT-4 / iPhone 类）
-    def _other(m):
-        s, e = m.span()
-        before = text[s - 1] if s > 0 else ""
-        after = text[e] if e < len(text) else ""
-        if (before.isascii() and before.isalpha()) or (after.isascii() and after.isalpha()):
-            return m.group(0)
-        return _cn_num(m.group(0))
-
-    return _re.sub(r"\d+(?:\.\d+)?", _other, text)
-
+# 生成串行锁（2026-09-20 根治并发崩溃，2026-09-22 子进程化后语义保留）：
+# 全局同一时刻只允许一个 VibeVoice 生成 / 一个 worker 存活——
+# 并发 N 个 worker = N×6.8GB，16GB 机器必炸（即 abort 134 现场的内存基数）。
+# 排队等待的请求只占线程栈内存，安全；openMAIC 侧需 TTS_REQUEST_TIMEOUT_MS 调大（排队计入超时）。
+_VV_GEN_LOCK = threading.Lock()
+_VV_WORKER = {"proc": None, "busy": False, "last_active": time.time(), "seq": 0}
 
 def vv_resolve_voice(name: str) -> str | None:
     """返回 VibeVoice 音色名；不是 VibeVoice 音色则 None。"""
@@ -217,90 +198,104 @@ def vv_resolve_voice(name: str) -> str | None:
     return None
 
 
-def _vv_init():
-    """懒加载 VibeVoice 模型（线程安全单例）。"""
-    if _VV["model"] is not None:
-        return
-    with _VV["lock"]:
-        if _VV["model"] is not None:
-            return
-        import sys
+def _vv_worker_proc() -> subprocess.Popen:
+    """取存活 worker；没有则拉起（模型冷加载发生在 worker 内首个请求，约 30-40s）。"""
+    p = _VV_WORKER["proc"]
+    if p is not None and p.poll() is None:
+        return p
+    worker_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "vv_worker.py")
+    p = subprocess.Popen(
+        [sys.executable, worker_path],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=None,  # 继承父进程 stderr → 模型加载日志进服务日志
+        env={**os.environ, "VIBEVOICE_DIR": VIBEVOICE_DIR, "VIBEVOICE_MODEL": VIBEVOICE_MODEL,
+             "VV_IDLE_UNLOAD_SEC": str(VV_IDLE_UNLOAD_SEC)},
+    )
+    _VV_WORKER["proc"] = p
+    print(f"[vv-worker] spawned pid={p.pid}", flush=True)
+    return p
 
-        sys.path.insert(0, VIBEVOICE_DIR)
-        os.environ.setdefault("HF_HUB_OFFLINE", "1")
-        os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 
-        import torch
-        from vibevoice.modular.modeling_vibevoice_inference import (
-            VibeVoiceForConditionalGenerationInference,
+def _vv_request(payload: dict, timeout: float) -> dict:
+    """发一行 JSON 请求，带截止时间读一行回复；超时/死亡时杀掉 worker 并抛错。
+
+    worker 死亡（含被超时杀掉）不致命：下一个请求会自动重拉新 worker。
+    """
+    p = _vv_worker_proc()
+    timed_out = {"flag": False}
+
+    def _kill_on_timeout():
+        timed_out["flag"] = True
+        p.kill()
+
+    killer = threading.Timer(timeout, _kill_on_timeout)
+    try:
+        killer.start()
+        p.stdin.write((json.dumps(payload) + "\n").encode("utf-8"))
+        p.stdin.flush()
+        line = p.stdout.readline().decode("utf-8")
+    finally:
+        killer.cancel()
+    if not line:
+        try:
+            p.wait(5)
+        except subprocess.TimeoutExpired:
+            p.kill()
+        raise RuntimeError(
+            f"vv-worker 无响应（pid={p.pid}, exit={p.poll()}, timeout={timed_out['flag']}）"
         )
-        from vibevoice.processor.vibevoice_processor import VibeVoiceProcessor
-
-        print(f"[vibevoice] loading model from {VIBEVOICE_MODEL} ...")
-        processor = VibeVoiceProcessor.from_pretrained(VIBEVOICE_MODEL)
-        model = VibeVoiceForConditionalGenerationInference.from_pretrained(
-            VIBEVOICE_MODEL,
-            torch_dtype=torch.bfloat16,
-            device_map=None,
-            attn_implementation="sdpa",  # Mac 无 CUDA 注意力，用 sdpa
-        )
-        model = model.to("mps")
-        model.eval()
-        model.set_ddpm_inference_steps(num_steps=10)
-        _VV["model"], _VV["processor"] = model, processor
-        print("[vibevoice] model ready")
+    return json.loads(line)
 
 
 def vv_generate(text: str, voice: str) -> bytes:
-    """同步生成，返回 wav 字节（24kHz int16 单声道）。"""
-    import numpy as np
-    import torch
-
-    _vv_init()
-    voice_wav = os.path.join(VIBEVOICE_DIR, "demo", "voices", f"{voice}.wav")
-    if not os.path.isfile(voice_wav):
-        raise FileNotFoundError(
-            f"VibeVoice 音色不存在: {voice}（缺 {voice_wav}；克隆音色请把 5-10s 人声样音放到该目录，文件名即音色名）"
-        )
-
-    text = "Speaker 1: " + normalize_numbers(text.strip().translate(_PUNCT_MAP))
-    # 串行锁包住 编码+生成+解码 全程（不只是 generate）：processor 编码也吃内存
+    """同步生成，返回 wav 字节（24kHz int16 单声道）。串行锁内完成整个派发。"""
     with _VV_GEN_LOCK:
-        return _vv_generate_locked(text, voice_wav)
+        _VV_WORKER["busy"] = True
+        _VV_WORKER["last_active"] = time.time()
+        try:
+            _VV_WORKER["seq"] += 1
+            reply = _vv_request(
+                {"id": _VV_WORKER["seq"], "text": text, "voice": voice},
+                VV_REQUEST_TIMEOUT_SEC,
+            )
+            if not reply.get("ok"):
+                raise RuntimeError(f"vv-worker: {reply.get('error')}")
+            with open(reply["wav"], "rb") as f:
+                wav = f.read()
+            os.unlink(reply["wav"])
+            return wav
+        finally:
+            _VV_WORKER["busy"] = False
+            _VV_WORKER["last_active"] = time.time()
 
 
-def _vv_generate_locked(text: str, voice_wav: str) -> bytes:
-    import numpy as np
-    import torch
+def _vv_idle_watchdog():
+    """父进程侧空闲看门狗（主退出路径；worker 自身的空闲退出是兜底）。"""
+    while True:
+        time.sleep(15)
+        p = _VV_WORKER["proc"]
+        if p is None or p.poll() is not None or _VV_WORKER["busy"]:
+            continue
+        if time.time() - _VV_WORKER["last_active"] < VV_IDLE_UNLOAD_SEC:
+            continue
+        if not _VV_GEN_LOCK.acquire(blocking=False):
+            continue  # 正有请求在跑/在排队，下轮再看
+        try:
+            print(f"[vv-worker] idle {VV_IDLE_UNLOAD_SEC}s, exiting pid={p.pid}（内存随进程归还）", flush=True)
+            try:
+                p.stdin.write(b'{"cmd": "quit"}\n')
+                p.stdin.flush()
+                p.wait(10)
+            except Exception:
+                p.kill()
+                p.wait()
+            _VV_WORKER["proc"] = None
+        finally:
+            _VV_GEN_LOCK.release()
 
-    inputs = _VV["processor"](
-        text=[text],
-        voice_samples=[[voice_wav]],
-        padding=True,
-        return_tensors="pt",
-        return_attention_mask=True,
-    )
-    outputs = _VV["model"].generate(
-        **inputs,
-        max_new_tokens=None,
-        cfg_scale=1.3,
-        tokenizer=_VV["processor"].tokenizer,
-        generation_config={"do_sample": False},
-    )
-    audio = outputs.speech_outputs[0]
-    if isinstance(audio, torch.Tensor):
-        audio = audio.detach().cpu().to(torch.float32).numpy()  # bf16 需先转 float32
-    pcm = (np.clip(audio, -1.0, 1.0) * 32767).astype("<i2").tobytes()
 
-    import wave
-
-    with io.BytesIO() as buf:
-        with wave.open(buf, "wb") as w:
-            w.setnchannels(1)
-            w.setsampwidth(2)
-            w.setframerate(24000)
-            w.writeframes(pcm)
-        return buf.getvalue()
+threading.Thread(target=_vv_idle_watchdog, daemon=True).start()
 
 
 def _wav_to_mp3(wav_bytes: bytes) -> bytes:

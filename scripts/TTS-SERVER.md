@@ -8,6 +8,7 @@
 # 必须用 VibeVoice 的 venv（两引擎依赖合一）
 /Volumes/macext/code/demo/VibeVoice/venv/bin/python scripts/edge-tts-server.py
 # 环境变量：PORT（默认8500）/ VIBEVOICE_DIR / VIBEVOICE_MODEL / VIBEVOICE_DISABLED=1（纯edge模式）
+#          VV_IDLE_UNLOAD_SEC（默认900，vv worker 空闲多少秒自动退出）/ VV_REQUEST_TIMEOUT_SEC（默认1200）
 ```
 
 ## 音色路由（按 voice 名自动分发）
@@ -25,7 +26,9 @@
 | `vv-anchen` | 安辰（zh-Anchen_man_bgm） | 中文男声，带 BGM 氛围 |
 | `vv-<任意名>` | 自定义克隆音色 | 见下方扩展 |
 
-性能：首次请求约 30-40s（模型加载，之后常驻约 5GB 内存），常驻后单条生成约为音频时长的 2 倍（RTF~2x）。中文标点自动转英文标点（官方建议）。忽略 speed 参数。
+性能：首次请求约 30-40s（worker 冷启动 + 模型加载），常驻 worker 内单条生成约为音频时长的 2 倍（RTF~2x）。中文标点自动转英文标点（官方建议）。忽略 speed 参数。
+
+**内存模型（ZOO-833，2026-09-22 子进程化）**：生成在独立 worker 进程（`vv_worker.py`）中进行，服务主进程只做路由（~58MB，不加载 torch）；worker 加载模型后 ~6.9GB，**空闲 15 分钟（`VV_IDLE_UNLOAD_SEC`）自动退出**，内存随进程全额归还。worker 意外死亡不致命：该次请求 500，下一次请求自动重拉。**监控口径**：MPS 内存不计入 `ps` RSS（会显示成几 MB 的假象），查占用用 `footprint <pid>`；`/health` 的 `worker_running`/`worker_pid` 字段反映 worker 状态。
 
 ## 扩展：加入自己克隆的音色
 
@@ -79,6 +82,7 @@ BGM 不是功能，是烧在样音文件里的：`zh-Anchen_man_bgm.wav` 本身�
 2. 崩溃后重启失败（exit 1）= 内存未回收，等 1-2 分钟再试
 3. 本服务无自动重启机制（无 launchd/crontab），崩了要手动拉起：
    `cd openmaic/scripts && nohup /path/to/VibeVoice/venv/bin/python edge-tts-server.py > /tmp/tts-server.log 2>&1 &`
+   （2026-09-22 子进程化后，生成期崩溃只损失当次请求——worker 死 ≠ 服务死，重启服务的场景大幅减少；内存也不再需要靠重启回收，worker 空闲自动退出）
 4. ~~长期根治（生成串行锁）~~ **已于 2026-09-20 实施**：`_VV_GEN_LOCK` 串行锁包住 编码+生成+解码 全程，全局同一时刻仅一个 VibeVoice 生成，其余 FIFO 排队（排队只占线程栈内存，安全）。实测 3 并发请求 27.9/38.6/48.6s 交错完成、全部成功。**配套**：openMAIC `.env.local` 已加 `TTS_REQUEST_TIMEOUT_MS=600000`（排队等待计入请求超时，30s 默认值会误杀排队片段）。运行纪律第 1 条（同时只跑一个 vv 课程）仍建议遵守——串行锁保不崩，但两个课会互相拖慢
 
 ## 串行锁的设计原理：内存账本（2026-09-20 补）
