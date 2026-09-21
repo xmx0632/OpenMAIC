@@ -56,9 +56,35 @@ describe('resource profiles', () => {
     });
   });
 
+  it('resolves apple-silicon to a hardware-GPU native profile', () => {
+    const env: NodeJS.ProcessEnv = { RENDER_RESOURCE_PROFILE: 'apple-silicon' };
+    const profile = resolveResourceProfile(env);
+
+    expect(profile).toMatchObject({
+      name: 'apple-silicon',
+      capturePolicy: 'prefer-beginframe',
+      requestedCaptureMode: 'beginframe',
+      requireBeginFrame: false,
+      producerWorkers: 1,
+      maxConcurrency: 1,
+      maxPreviewPixels: 3840 * 2160,
+      maxPreviewDeviceScaleFactor: 2,
+      minimumMemoryBytes: 8 * GIB,
+    });
+    expect(env).toMatchObject({
+      PRODUCER_MAX_WORKERS: '1',
+      PRODUCER_LOW_MEMORY_MODE: 'false',
+      PRODUCER_FORCE_SCREENSHOT: 'false',
+      PRODUCER_BROWSER_GPU_MODE: 'hardware',
+      PRODUCER_ENABLE_BROWSER_POOL: 'false',
+      PRODUCER_EXPECTED_CHROMIUM_MAJOR: '151',
+      RENDER_REQUIRE_BEGINFRAME: 'false',
+    });
+  });
+
   it('rejects unknown profiles and contradictory tuning knobs', () => {
     expect(() => resolveResourceProfile({ RENDER_RESOURCE_PROFILE: 'fast' })).toThrow(
-      /expected standard or low-memory/,
+      /expected standard, low-memory, or apple-silicon/,
     );
     expect(() =>
       resolveResourceProfile({

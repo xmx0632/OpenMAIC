@@ -73,6 +73,9 @@ export function buildProducerJobConfig(
     format: options.format,
   };
   if (workers !== undefined) producerOptions.workers = workers;
+  // apple-silicon runs natively with a real GPU: let the producer auto-probe the
+  // hardware encoder (h264_videotoolbox on darwin) instead of libx264.
+  if (config.resourceProfile.name === 'apple-silicon') producerOptions.useGpu = true;
   return producerOptions;
 }
 

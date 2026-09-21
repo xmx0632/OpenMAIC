@@ -572,7 +572,12 @@ async function main(): Promise<void> {
   // makeProjectDir() would ENOENT. mktemp still creates a fresh subdir per job.
   await mkdir(config.tmpDir, { recursive: true }).catch(() => {});
 
-  serve({ fetch: app.fetch, port: config.port }, (info) => {
+  // RENDER_HOST pins the bind address for standalone/native deployments (e.g.
+  // 127.0.0.1 to stay loopback-only without the container's iptables lockdown).
+  // Unset keeps the node-server default (all interfaces) for containers, where
+  // the compose network provides the boundary instead.
+  const hostname = process.env.RENDER_HOST?.trim() || undefined;
+  serve({ fetch: app.fetch, port: config.port, hostname }, (info) => {
     console.log(
       `[render-service] listening on :${info.port} ` +
         `(resourceProfile=${config.resourceProfile.name}, ` +

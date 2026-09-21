@@ -3,7 +3,7 @@ import { totalmem } from 'node:os';
 
 const GIB = 1024 ** 3;
 
-export type ResourceProfileName = 'standard' | 'low-memory';
+export type ResourceProfileName = 'standard' | 'low-memory' | 'apple-silicon';
 export type RequestedCaptureMode = 'beginframe' | 'screenshot';
 export type CapturePolicy = 'prefer-beginframe' | 'screenshot-only';
 
@@ -55,6 +55,11 @@ function defineProfile(
 const PROFILES: Record<ResourceProfileName, ResourceProfile> = {
   standard: defineProfile('standard', 'prefer-beginframe', 8 * GIB, 4),
   'low-memory': defineProfile('low-memory', 'screenshot-only', 4 * GIB, 1),
+  // Native macOS deployment: same shape as standard, but Chromium composites via
+  // ANGLE/Metal (real host GPU) instead of SwiftShader, and the render config
+  // opts into GPU encoding (VideoToolbox on darwin). Container-incompatible by
+  // design: Docker Desktop on macOS passes no GPU into the Linux VM.
+  'apple-silicon': defineProfile('apple-silicon', 'prefer-beginframe', 8 * GIB, 4),
 };
 
 function requiredProducerEnvironment(profile: ResourceProfile): Record<string, string> {
@@ -63,9 +68,11 @@ function requiredProducerEnvironment(profile: ResourceProfile): Record<string, s
     PRODUCER_MAX_WORKERS: String(profile.producerWorkers),
     PRODUCER_LOW_MEMORY_MODE: String(screenshot),
     PRODUCER_FORCE_SCREENSHOT: String(screenshot),
-    // The producer's software selector uses SwiftShader and keeps BeginFrame
-    // eligible with no host GPU or device passthrough.
-    PRODUCER_BROWSER_GPU_MODE: 'software',
+    // The software selector uses SwiftShader and keeps BeginFrame eligible with
+    // no host GPU or device passthrough — the right choice inside containers.
+    // apple-silicon runs natively with a real GPU, so use the hardware selector
+    // (ANGLE Metal on darwin) for accelerated compositing/rasterization.
+    PRODUCER_BROWSER_GPU_MODE: profile.name === 'apple-silicon' ? 'hardware' : 'software',
     PRODUCER_ENABLE_BROWSER_POOL: 'false',
     PRODUCER_EXPECTED_CHROMIUM_MAJOR: '151',
     RENDER_REQUIRE_BEGINFRAME: String(profile.requireBeginFrame),
@@ -106,8 +113,10 @@ function assertCompatibleEnvironment(profile: ResourceProfile, env: NodeJS.Proce
 
 export function resolveResourceProfile(env: NodeJS.ProcessEnv = process.env): ResourceProfile {
   const raw = env.RENDER_RESOURCE_PROFILE?.trim() || 'standard';
-  if (raw !== 'standard' && raw !== 'low-memory') {
-    throw new Error(`Invalid RENDER_RESOURCE_PROFILE=${raw}; expected standard or low-memory.`);
+  if (raw !== 'standard' && raw !== 'low-memory' && raw !== 'apple-silicon') {
+    throw new Error(
+      `Invalid RENDER_RESOURCE_PROFILE=${raw}; expected standard, low-memory, or apple-silicon.`,
+    );
   }
   const profile = PROFILES[raw];
   assertCompatibleEnvironment(profile, env);
