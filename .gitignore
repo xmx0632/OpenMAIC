@@ -95,3 +95,7 @@ e2e/__screenshots-619/
 zoo456-logs/
 *.pid
 *.log
+
+# Python bytecode cache (TTS server runtime junk)
+scripts/__pycache__/
+__pycache__/
