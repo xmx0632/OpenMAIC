@@ -1,8 +1,4 @@
 > 本文件是 `~/.claude/skills/openmaic-video-gen/SKILL.md` 的仓库存档副本（版本同步用）；实际生效以本机 skills 目录为准，配套脚本在 skill 目录的 scripts/ 下。
-name: openmaic-video-gen
-description: "用本机 openMAIC 服务制作视频教程并导出 MP4/教学资源包的端到端流水线：提交生成→轮询→场景类型校验（全 slides、无 quiz/PBL）→封面结尾截图→导出教学资源包(内含PPTX+交互页,2026-09-21起不再单独导出PPTX)→渲染 MP4→落盘 /Volumes/macext/downloads（移动硬盘专用目录,未挂载时回退 ~/Downloads）。Triggers: 用 openMAIC 做视频教程、生成课堂、导出 mp4/教学资源包/pptx、制作课程视频、openmaic。"
-license: MIT
----
 
 # openMAIC 视频教程端到端制作与导出
 
@@ -15,7 +11,7 @@ license: MIT
 
 - 本机服务 `http://localhost:3000`（OpenMAIC v1.0.1，`/Volumes/macext/code/demo/OpenMAIC`），默认模型 GLM `glm-5.3-flash`（超时已修复，ZOO-456），健康检查 `GET /api/health`
 - 生成 API：`POST /api/generate-classroom`，body `{requirement, enableTTS, enableImageGeneration, enableVideoGeneration, enableWebSearch}` → 202 返回 `{jobId, pollUrl}`；轮询 pollUrl 30~60s 一次，`done:true`（或 `status:succeeded`）时 `result.url` 为课堂地址。**默认 `enableImageGeneration: true`**（ZOO-511 起接入硅基流动 Kwai-Kolors/Kolors，服务端已限流 2 张/分钟；关闭用 `--flags '{"enableImageGeneration":false}'`）。**配图由绘图codex 外部提供的流程（ZOO-515 默认）提交时必须显式传该 flags**——脚本默认 true 会混入内置生成图，F28（ZOO-756）曾因此占位图残留成片、被大类验收退回
-- 耗时基线：单场景 4~8 分钟，6~7 场景课堂全程约 30 分钟；**开配图时媒体阶段每张间隔 ≥33 秒串行生成（2 IPM 限流），10 页课程约多 5~6 分钟，属正常不要当成卡死**；**单 job 上限 45 分钟；严格串行，一次只跑一个 job**
+- 耗时基线（2026-09-26 起生产启用场景并发 `PARALLEL_SCENE_CONCURRENCY=3`，ZOO-986 实测后改写）：大纲约 1.5 分钟 + 场景阶段（7 场景 G 规格）约 17~19 分钟（c=1 串行口径为 47 分钟）+ TTS/媒体/落盘，**6~7 场景课堂全程约 20~25 分钟**（旧口径「单场景 4~8 分钟、全程约 30 分钟」作废）；场景完成顺序可能乱序（日志 Scene k/N 行乱序属正常），入库与成片顺序仍严格按大纲序；**开配图时媒体阶段每张间隔 ≥33 秒串行生成（2 IPM 限流），10 页课程约多 5~6 分钟，属正常不要当成卡死**；**单 job 上限 45 分钟；严格串行，一次只跑一个 job**（并发是 job 内场景级，全局「一次一个 job」不变）
 - MP4 渲染：`GET /api/export-video/capability` 返回 `enabled:true` 时可用（渲染走课堂 ZIP 上传 `/api/export-video/render`，由课堂页自动完成）；渲染时长≈课堂时长
 - **PPTX 无服务端端点**（pptxgenjs 浏览器端组装），教学资源包与 MP4 的导出 ZIP 也在浏览器端组装——所以导出一律用 playwright 驱动课堂页点按钮，不要试图复刻前端请求
 - 课堂页翻页用底部 "Next scene" 按钮（`button[aria-label="Next scene"]`），ArrowRight 无效
