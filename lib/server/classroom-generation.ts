@@ -33,6 +33,8 @@ import {
   generateTTSForClassroom,
 } from '@/lib/server/classroom-media-generation';
 import { buildVideoManifestFromOutlines } from '@/lib/media/video-manifest';
+import { getParallelSceneConcurrency } from '@/lib/server/provider-config';
+import { lazyBoundedMap } from '@/lib/utils/concurrency';
 import type { UserRequirements } from '@/lib/types/generation';
 import type { Scene, Stage } from '@/lib/types/stage';
 import { AGENT_COLOR_PALETTE, AGENT_DEFAULT_AVATARS } from '@/lib/constants/agent-defaults';
@@ -247,16 +249,21 @@ export async function generateClassroom(
   // provider in the route) degrades to the classroom model with a warn, mirroring
   // the existing web-search-query-rewrite handling below — a misconfigured
   // optional route never aborts classroom generation.
+  // The cache stores the resolution *promise*, not its result: concurrent
+  // scene units (see the bounded-concurrency loop below) hitting the same
+  // stage key — e.g. several `slide` outlines sharing `scene-content:slide` —
+  // must share one resolution instead of racing duplicate resolveModel calls.
+  // The promise never rejects: both failure modes resolve to the fallback.
   const stageModelCache = new Map<
     LlmStage,
-    {
+    Promise<{
       model: LanguageModel;
       outputWindow?: number;
       thinking: ThinkingConfig | undefined;
-    }
+    }>
   >();
 
-  const resolveStageModel = async (
+  const resolveStageModel = (
     stage: LlmStage,
   ): Promise<{
     model: LanguageModel;
@@ -266,41 +273,39 @@ export async function generateClassroom(
     const cached = stageModelCache.get(stage);
     if (cached) return cached;
 
-    // No route configured → reuse the classroom model, no extra resolution.
-    if (!getStageModel(stage)) {
-      const fallback = {
-        model: languageModel,
-        outputWindow: modelInfo?.outputWindow,
-        thinking: classroomThinking,
-      };
-      stageModelCache.set(stage, fallback);
-      return fallback;
-    }
+    const resolution = (async () => {
+      // No route configured → reuse the classroom model, no extra resolution.
+      if (!getStageModel(stage)) {
+        return {
+          model: languageModel,
+          outputWindow: modelInfo?.outputWindow,
+          thinking: classroomThinking,
+        };
+      }
 
-    try {
-      const resolved = await resolveModel({ stage });
-      const entry = {
-        model: resolved.model,
-        outputWindow: resolved.modelInfo?.outputWindow,
-        thinking: resolved.thinkingConfig,
-      };
-      log.info(`Stage "${stage}" routed to model: ${resolved.modelString}`);
-      stageModelCache.set(stage, entry);
-      return entry;
-    } catch (err) {
-      log.warn(
-        `Stage "${stage}" route "${getStageModel(stage)}" could not be resolved; ` +
-          `falling back to the generate-classroom model.`,
-        err,
-      );
-      const fallback = {
-        model: languageModel,
-        outputWindow: modelInfo?.outputWindow,
-        thinking: classroomThinking,
-      };
-      stageModelCache.set(stage, fallback);
-      return fallback;
-    }
+      try {
+        const resolved = await resolveModel({ stage });
+        log.info(`Stage "${stage}" routed to model: ${resolved.modelString}`);
+        return {
+          model: resolved.model,
+          outputWindow: resolved.modelInfo?.outputWindow,
+          thinking: resolved.thinkingConfig,
+        };
+      } catch (err) {
+        log.warn(
+          `Stage "${stage}" route "${getStageModel(stage)}" could not be resolved; ` +
+            `falling back to the generate-classroom model.`,
+          err,
+        );
+        return {
+          model: languageModel,
+          outputWindow: modelInfo?.outputWindow,
+          thinking: classroomThinking,
+        };
+      }
+    })();
+    stageModelCache.set(stage, resolution);
+    return resolution;
   };
 
   // scene-content routes per outline type via the composite key
@@ -557,98 +562,154 @@ export async function generateClassroom(
   log.info('Stage 2: Generating scene content and actions...');
   let generatedScenes = 0;
 
-  for (const [index, outline] of outlines.entries()) {
-    const safeOutline = applyOutlineFallbacks(outline, true, {
-      allowProceduralSkill: vocationalActive,
-    });
-    const progressStart = 30 + Math.floor((index / Math.max(outlines.length, 1)) * 60);
+  // Server-side bounded scene concurrency, mirroring the browser pipeline's
+  // #572 opt-in and reusing the same PARALLEL_SCENE_CONCURRENCY knob (0/unset
+  // = default = strictly serial, so out-of-box behaviour is unchanged). Each
+  // scene's content + actions LLM calls form one work unit — neither call
+  // reads state from a sibling scene, so units are independent and can run
+  // ahead with bounded concurrency.
+  const sceneConcurrency = getParallelSceneConcurrency();
+  const sceneParallelism = sceneConcurrency > 1 && outlines.length > 1 ? sceneConcurrency : 1;
+  log.info(
+    `Generating ${outlines.length} scenes with concurrency ${sceneParallelism}` +
+      ` (PARALLEL_SCENE_CONCURRENCY=${sceneConcurrency})`,
+  );
 
-    await options.onProgress?.({
-      step: 'generating_scenes',
-      progress: Math.max(progressStart, 31),
-      message: `Generating scene ${index + 1}/${outlines.length}: ${safeOutline.title}`,
-      scenesGenerated: generatedScenes,
-      totalScenes: outlines.length,
-    });
+  // A work unit never rejects: PBL content failures degrade to null (scene
+  // skipped) exactly like the serial loop, while a fatal error is recorded
+  // per index here and rethrown by the consumption loop below when it reaches
+  // that outline — the same scene the serial loop would have failed on, with
+  // earlier scenes still inserted. `shouldContinue` keeps queued units from
+  // starting after a fatal error; already in-flight units finish and their
+  // results are simply discarded.
+  const fatalSceneErrors = new Map<number, unknown>();
 
-    const reportSceneRetry = async (
-      phase: 'content' | 'actions',
-      event: { attempt: number; maxAttempts: number; reason: string },
-    ) => {
-      const nextAttempt = Math.min(event.attempt + 1, event.maxAttempts);
-      const message = `Retrying scene ${index + 1}/${outlines.length} ${phase} (${nextAttempt}/${event.maxAttempts}): ${safeOutline.title}`;
-      log.warn(`${message} — ${event.reason}`);
-      await options.onProgress?.({
-        step: 'generating_scenes',
-        progress: Math.max(progressStart, 31),
-        message,
-        scenesGenerated: generatedScenes,
-        totalScenes: outlines.length,
-      });
-    };
-
-    // Resolve this scene's content model lazily, per outline type. The package
-    // gets the provider-bound AICallFn and the app injects its agentic PBL loop
-    // as the classified fallback, preserving single-call → loop routing.
-    const contentCall = await resolveSceneContentCall(safeOutline.type);
-    const content = await (async () => {
+  const sceneWork = lazyBoundedMap(
+    outlines,
+    sceneParallelism,
+    async (outline, index) => {
+      // Everything runs inside this try so the unit can never reject — see
+      // the comment above: a rejection would only surface (if at all) when
+      // the consumption loop reaches this index, risking a spurious
+      // unhandled-rejection warning in the meantime.
       try {
-        return await withGenerationRetry(
+        const safeOutline = applyOutlineFallbacks(outline, true, {
+          allowProceduralSkill: vocationalActive,
+        });
+        const progressStart = 30 + Math.floor((index / Math.max(outlines.length, 1)) * 60);
+
+        await options.onProgress?.({
+          step: 'generating_scenes',
+          progress: Math.max(progressStart, 31),
+          message: `Generating scene ${index + 1}/${outlines.length}: ${safeOutline.title}`,
+          scenesGenerated: generatedScenes,
+          totalScenes: outlines.length,
+        });
+
+        const reportSceneRetry = async (
+          phase: 'content' | 'actions',
+          event: { attempt: number; maxAttempts: number; reason: string },
+        ) => {
+          const nextAttempt = Math.min(event.attempt + 1, event.maxAttempts);
+          const message = `Retrying scene ${index + 1}/${outlines.length} ${phase} (${nextAttempt}/${event.maxAttempts}): ${safeOutline.title}`;
+          log.warn(`${message} — ${event.reason}`);
+          await options.onProgress?.({
+            step: 'generating_scenes',
+            progress: Math.max(progressStart, 31),
+            message,
+            scenesGenerated: generatedScenes,
+            totalScenes: outlines.length,
+          });
+        };
+
+        // Resolve this scene's content model lazily, per outline type. The package
+        // gets the provider-bound AICallFn and the app injects its agentic PBL loop
+        // as the classified fallback, preserving single-call → loop routing.
+        const contentCall = await resolveSceneContentCall(safeOutline.type);
+        const content = await (async () => {
+          try {
+            return await withGenerationRetry(
+              () =>
+                generateSceneContent(safeOutline, contentCall.aiCall, {
+                  agents,
+                  languageDirective,
+                  allowProceduralSkill: vocationalActive,
+                  ...(safeOutline.type === 'pbl'
+                    ? {
+                        pblLoopFallback: (input) =>
+                          generatePBLV2Project(
+                            input,
+                            contentCall.model,
+                            callLLM,
+                            { logger: log },
+                            contentCall.thinking,
+                          ),
+                      }
+                    : {}),
+                }),
+              {
+                label: `scene ${index + 1}/${outlines.length} content`,
+                shouldRetryResult: (result) => result === null,
+                onRetry: (event) => reportSceneRetry('content', event),
+              },
+            );
+          } catch (error) {
+            return containPBLGenerationError(error, safeOutline.title);
+          }
+        })();
+        if (!content) {
+          log.warn(`Skipping scene "${safeOutline.title}" — content generation failed`);
+          return null;
+        }
+
+        const actionsAiCall = await getSceneActionsAiCall();
+        const actions = await withGenerationRetry(
           () =>
-            generateSceneContent(safeOutline, contentCall.aiCall, {
+            generateSceneActions(safeOutline, content, actionsAiCall, {
               agents,
               languageDirective,
-              allowProceduralSkill: vocationalActive,
-              ...(safeOutline.type === 'pbl'
-                ? {
-                    pblLoopFallback: (input) =>
-                      generatePBLV2Project(
-                        input,
-                        contentCall.model,
-                        callLLM,
-                        { logger: log },
-                        contentCall.thinking,
-                      ),
-                  }
-                : {}),
             }),
           {
-            label: `scene ${index + 1}/${outlines.length} content`,
-            shouldRetryResult: (result) => result === null,
-            onRetry: (event) => reportSceneRetry('content', event),
+            label: `scene ${index + 1}/${outlines.length} actions`,
+            onRetry: (event) => reportSceneRetry('actions', event),
           },
         );
+        log.info(
+          `Scene ${index + 1}/${outlines.length} "${safeOutline.title}": ${actions.length} actions`,
+        );
+
+        return { safeOutline, content, actions };
       } catch (error) {
-        return containPBLGenerationError(error, safeOutline.title);
+        fatalSceneErrors.set(index, error);
+        return null;
       }
-    })();
-    if (!content) {
-      log.warn(`Skipping scene "${safeOutline.title}" — content generation failed`);
-      continue;
-    }
+    },
+    { shouldContinue: () => fatalSceneErrors.size === 0 },
+  );
 
-    const actionsAiCall = await getSceneActionsAiCall();
-    const actions = await withGenerationRetry(
-      () =>
-        generateSceneActions(safeOutline, content, actionsAiCall, {
-          agents,
-          languageDirective,
-        }),
-      {
-        label: `scene ${index + 1}/${outlines.length} actions`,
-        onRetry: (event) => reportSceneRetry('actions', event),
-      },
-    );
-    log.info(`Scene "${safeOutline.title}": ${actions.length} actions`);
+  // Consume results strictly in outline order: completion order ≠ outline
+  // order under concurrency, but `scenes` must land in outline order (the
+  // video manifest and classroom player rely on it). lazyBoundedMap returns
+  // per-item promises in input order, so awaiting them sequentially preserves
+  // insertion order while later units keep generating in the background —
+  // with concurrency 1 this is exactly the original serial loop.
+  for (const [index, work] of sceneWork.entries()) {
+    const result = await work;
+    const fatal = fatalSceneErrors.get(index);
+    if (fatal !== undefined) throw fatal;
+    if (!result) continue;
 
-    const sceneId = createSceneWithActions(safeOutline, content, actions, api);
+    const sceneId = createSceneWithActions(result.safeOutline, result.content, result.actions, api);
     if (!sceneId) {
-      log.warn(`Skipping scene "${safeOutline.title}" — scene creation failed`);
+      log.warn(`Skipping scene "${result.safeOutline.title}" — scene creation failed`);
       continue;
     }
 
     generatedScenes += 1;
-    const progressEnd = 30 + Math.floor(((index + 1) / Math.max(outlines.length, 1)) * 60);
+    // Completion-count progress (not outline index): under concurrency a
+    // later scene can finish first, so index-based progress could move
+    // backwards. Display-layer only.
+    const progressEnd = 30 + Math.floor((generatedScenes / Math.max(outlines.length, 1)) * 60);
     await options.onProgress?.({
       step: 'generating_scenes',
       progress: Math.min(progressEnd, 90),
