@@ -104,6 +104,53 @@ describe('buildTimeline — effects', () => {
     expect(tl.scenes[0].effects[0].params).toMatchObject({ dimness: 0.8 });
     expect(tl.scenes[0].effects[1].params).toMatchObject({ color: '#00ff00' });
   });
+
+  it('replaces an earlier spotlight when a later one fires (single slot, no stacked dims)', () => {
+    // ZOO-1000: live playback holds ONE spotlight slot, so each spotlight's
+    // visible life ends at the next one's fire time. Without this, concurrent
+    // auto-clear lifetimes stack their dim rects and darken the exported base
+    // frame far past what the classroom shows (four 0.15 dims → ~0.52 brightness).
+    // speech(2000) → sp1 → speech(2000) → sp2 → speech(2000):
+    // sp1 fires at 2000, sp2 at 4000; sp1 must end at 4000, sp2 at completion.
+    const scenes = [
+      slide(
+        's',
+        [
+          speech('a', 'x'),
+          spotlight('sp1', 'e1'),
+          speech('b', 'y'),
+          spotlight('sp2', 'e2'),
+          speech('c', 'z'),
+        ],
+        { elements: [] },
+      ),
+    ];
+    const tl = buildTimeline(
+      scenes,
+      buildTimelineOptions(stubProbe({ a: 2000, b: 2000, c: 2000 })),
+    );
+
+    expect(tl.scenes[0].effects).toMatchObject([
+      { type: 'spotlight', startMs: 2000, durationMs: 2000 }, // 4000 - 2000
+      { type: 'spotlight', startMs: 4000, durationMs: 2000 }, // completion - 4000
+    ]);
+  });
+
+  it('leaves laser lifetimes untouched by spotlight slot replacement', () => {
+    // The live store has a separate laser slot, so a laser keeps its full
+    // auto-clear lifetime even when spotlights fire around it.
+    const scenes = [
+      slide('s', [speech('a', 'x'), spotlight('sp', 'e1'), laser('lz', 'e2'), speech('b', 'y')], {
+        elements: [],
+      }),
+    ];
+    const tl = buildTimeline(scenes, buildTimelineOptions(stubProbe({ a: 2000, b: 2000 })));
+    // spotlight fires at 2000; scene completes at 4000 → its full window is 2000.
+    const spot = tl.scenes[0].effects.find((e) => e.type === 'spotlight');
+    const laz = tl.scenes[0].effects.find((e) => e.type === 'laser');
+    expect(spot).toMatchObject({ startMs: 2000, durationMs: 2000 });
+    expect(laz).toMatchObject({ startMs: 2000, durationMs: 2000 });
+  });
 });
 
 describe('buildTimeline — play_video durationSource', () => {

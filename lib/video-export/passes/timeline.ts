@@ -119,6 +119,16 @@ export function buildTimeline(
     });
   }
 
+  // Live playback holds ONE spotlight slot (`ActionEngine.executeSpotlight` →
+  // `setSpotlight` overwrites it; `SpotlightOverlay` renders that slot alone),
+  // so a fired spotlight stops being visible the moment a later one fires. The
+  // segments above instead carry each spotlight's full auto-clear lifetime —
+  // emit them naively and concurrent spotlights stack their dim rects,
+  // darkening the base frame far past what the classroom ever shows
+  // (ZOO-1000: four stacked 0.15 dims read as an "unrelated screenshot").
+  // Clamp each spotlight to the next one's fire time in the same scene.
+  for (const bucket of buckets) applySpotlightSlotReplacement(bucket.effects);
+
   const irScenes: VideoTimelineScene[] = scenes.map((scene, index) => {
     const start = sceneStartMs.get(index) ?? 0;
     const end = sceneStartMs.get(index + 1) ?? totalDurationMs;
@@ -143,6 +153,33 @@ export function buildTimeline(
   const splitSubtitles = splitCues(subtitles);
 
   return { scenes: irScenes, subtitles: splitSubtitles, totalDurationMs, ttsEnabled, diagnostics };
+}
+
+/**
+ * Enforce the live player's single-spotlight slot on a scene's effect segments.
+ *
+ * `resolveActionTimeline` gives every fire-and-forget effect its auto-clear
+ * lifetime (chained through later effects), which models the shared *timer*
+ * correctly — but the live canvas store keeps one spotlight slot, so a new
+ * spotlight replaces the previous one's cutout instantly (`setSpotlight`
+ * overwrites; `AnimatePresence mode="wait"` retires the old overlay). The
+ * exported video must show the same thing: one spotlight at a time. Effects
+ * arrive in non-decreasing `startMs` order (they are pushed from the ordered
+ * segment list), so a forward walk suffices; at identical start times every
+ * spotlight but the last collapses to zero — the last action to fire is the
+ * one the live slot holds, so that is exactly what the video should show.
+ * Laser segments share the pass untouched: the live store has a separate
+ * laser slot, so lasers coexist with spotlights rather than replacing them.
+ */
+function applySpotlightSlotReplacement(effects: EffectSegment[]): void {
+  const spotIndexes = effects
+    .map((effect, i) => (effect.type === 'spotlight' ? i : -1))
+    .filter((i) => i >= 0);
+  for (let k = 0; k < spotIndexes.length; k++) {
+    const effect = effects[spotIndexes[k]!]!;
+    const nextStart = k + 1 < spotIndexes.length ? effects[spotIndexes[k + 1]!]!.startMs : Infinity;
+    effect.durationMs = Math.max(0, Math.min(effect.durationMs, nextStart - effect.startMs));
+  }
 }
 
 function dispatchSegment(
