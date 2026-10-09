@@ -24,7 +24,7 @@ license: MIT
 - 课堂页翻页用底部 "Next scene" 按钮（`button[aria-label="Next scene"]`），ArrowRight 无效
 - 请求体一律由脚本 `JSON.stringify` 生成（等价 python3 json.dumps），中文内嵌引号手拼易坏 JSON
 - API key / `.env.local` 内容绝不写入任何文档或评论
-- **TTS 双引擎**（2026-09-19 起，`scripts/edge-tts-server.py`，文档 `openmaic/scripts/TTS-SERVER.md`）：Edge 秒出（alloy 晓晓女声等）+ VibeVoice 本地大模型（`vv-xinran` 欣然女声 / `vv-bowen` 博文男声 / `vv-anchen` 安辰带BGM / `vv-1`、`vv-2` 自定义克隆音色 / `vv-<自定义克隆音色>`）。服务须用 `/Volumes/macext/code/demo/VibeVoice/venv/bin/python` 启动；VibeVoice 首次请求约 40s 加载，常驻后 RTF~2x，适合高质量配音场景
+- **TTS 三引擎**（2026-09-19 起，`scripts/edge-tts-server.py`，文档 `openmaic/scripts/TTS-SERVER.md`）：Edge 秒出（alloy 晓晓女声等）+ MiMo 在线 API（2026-10-09 接入：`mimo-*` 预置与克隆音色，24kHz 秒级，API Key 内置零配置）+ VibeVoice 本地大模型（`vv-xinran` 欣然女声 / `vv-bowen` 博文男声 / `vv-anchen` 安辰带BGM / `vv-1`、`vv-2` 自定义克隆音色 / `vv-<自定义克隆音色>`）。服务须用 `/Volumes/macext/code/demo/VibeVoice/venv/bin/python` 启动；**从 Multica 任务会话启动必须加 `env -u TMPDIR`**（否则服务继承任务级临时目录，任务结束后目录被清、MiMo 转 mp3 写临时文件即 500，2026-10-09 实证）；VibeVoice 首次请求约 40s 加载，常驻后 RTF~2x，适合高质量配音场景
 - **运行时切音色（免重启）**：生成请求加 `ttsVoice` 字段（`--flags '{"ttsVoice":"vv-xinran"}'`），优先级：请求参数 > TTS_VOICE 环境变量 > 默认 alloy。实测 vv-xinran 全链路生效
 
 ## TTS 音色设置（2026-09-19 新增）
@@ -44,19 +44,22 @@ curl -X POST http://localhost:3000/api/generate-classroom \
 TTS_VOICE=vv-xinran
 ```
 
-可用音色（走 8500 双引擎服务，详见 `openmaic/scripts/TTS-SERVER.md`）：
+可用音色（走 8500 三引擎服务，详见 `openmaic/scripts/TTS-SERVER.md`）：
 
 | 音色值 | 引擎 | 说明 |
 |--------|------|------|
 | `alloy` / `nova` / `onyx` 等 | Edge | 免费秒出（默认 alloy=晓晓女声） |
+| `mimo-茉莉` / `mimo-冰糖` / `mimo-苏打` / `mimo-白桦` | MiMo | 在线 API 预置中文音色（茉莉/冰糖女声、苏打/白桦男声），24kHz、秒级返回（2026-10-09 接入） |
+| `mimo-Mia` / `mimo-Chloe` / `mimo-Milo` / `mimo-Dean` | MiMo | 预置英文音色（Mia/Chloe 女声、Milo/Dean 男声） |
+| `mimo-clone-<样音名>` | MiMo | 音色克隆：样音与 vv- 共用项目内 `openmaic/demo/voices/`；**同名 mp3 优先于 wav**（每请求上传体积约 1/3，预转换 `ffmpeg -i <名>.wav -b:a 128k <名>.mp3`，删 mp3 即回退 wav；1686421f 起） |
 | `vv-xinran` | VibeVoice | 欣然女声，清晰自然，高质量推荐 |
 | `vv-bowen` | VibeVoice | 博文男声，沉稳 |
 | `vv-anchen` | VibeVoice | 安辰男声，带 BGM 氛围 |
 | `vv-1` | VibeVoice | 自定义克隆音色①（3s 样本，2026-09-20 登记；私人声音仅限本人使用） |
 | `vv-2` | VibeVoice | 自定义克隆音色②（10s 样本，登记同上；ZOO-785 已实测 ttsVoice 全链路生效，含 tts-verify） |
-| `vv-<自定义名>` | VibeVoice | 克隆音色：5-10s 人声样音放 `VibeVoice/demo/voices/<名>.wav` 即用 |
+| `vv-<自定义名>` | VibeVoice | 克隆音色：5-10s 人声样音放 `openmaic/demo/voices/<名>.wav` 即用（与 `mimo-clone-<名>` 共用同一份样音） |
 
-注意：VibeVoice 音色首次请求约 40s 模型加载（之后常驻约 5GB 内存），单条生成约为音频时长 2 倍；整课 TTS 阶段会比 Edge 慢数分钟，属正常。Edge 音色适合快速迭代，VibeVoice 适合最终成片。
+注意：VibeVoice 音色首次请求约 40s 模型加载（之后常驻约 5GB 内存），单条生成约为音频时长 2 倍；整课 TTS 阶段会比 Edge 慢数分钟，属正常。Edge 音色适合快速迭代，VibeVoice 适合最终成片。MiMo 为在线 API，同音色延迟波动大（实测 1.3s~19s，服务端为主）；克隆样音从 wav 换 mp3 后韵律可能变化，相似度需人耳 A/B 抽查，不满意删对应 mp3 即回退。
 
 ## 版本同步（改本 skill 后必做）
 
@@ -169,7 +172,7 @@ requirement 头部固定拼接以下约束块（`--no-constraints` 仅限调试�
 | tts-verify 报 `KeyError: 'audioId'` | 生成器偶发漏合成极短口播槽位（DY09 s2「先说开国。」4 字无 audioId/audioUrl，成片会静音跳读）。修复：按命名惯例补 audioId，用同音色（如 alloy）`/api/generate/tts` 合成、写 mp3、回填 audioId+audioUrl 并双存储同步（样板 `scripts/dy09-ttsfix.mjs`）；修完重跑 tts-verify |
 | 重导出后 PPTX/MP4 里图片消失（无图版） | 课堂页被访问过后 persistence 文档库与文件库是双存储：改嵌图/换图 URL 后必须**同步 persistence 文档库**，否则页面按文档库旧 URL 渲染、跨域取图失败产出无图成品（ZOO-756 v2 的 f28-urlswap.mjs 已内置同步，复用该模式） |
 | 提交前不确定是否有别的 job 在跑 | 先确认服务日志真身：`lsof -iTCP:3000 -sTCP:LISTEN` 找到监听进程，再看其 1w/2w 指向的文件（**2026-10-02 起实际日志是 `/private/tmp/z1000/next-start.log`，`zoo456-logs/server.log` 已停更于 09-26，别再拿旧文件判队列**；ZOO-1272 实测）。判队列口径：以最近 45 分钟窗口内 `Using server-configured model`（提交）、`Classroom persisted:`（完成）、`[ERROR] ... Classroom`（失败）计数，提交数 > 完成数+失败数 → 有 job 在跑；以 `Generated N scene outlines (… courseTitle: <名>)` 行认 job（带课程名，可区分是哪个课堂），再看其后有无该 job 的 `succeeded/failed`；最近 45 分钟内有未完结的 outlines 行 → 有 job 在跑，等它结束。**注意 `render/<uuid>` 下载轮询行是 MP4 渲染不是生成，不能当作生成活跃的证据**（ZOO-576 曾因此误判并行） |
-| 整机重启后 3000 全挂（G95 实证，2026-10-07） | 按序拉起：① `open -a Docker` 等 daemon；② `cd /Volumes/macext/code/demo/OpenMAIC && docker compose --profile server-persistence --profile video-export up -d`（只起 postgres+render-service）；③ **app 必须宿主跑** `npm run start`（日志 `/private/tmp/z1000/next-start.log`，重建目录）——compose 里的 openmaic 服务挂的是空命名卷，起它会 404 所有已有 classroom（`Classroom not found`），务必 `docker compose stop openmaic`；④ TTS：`/Volumes/macext/code/demo/VibeVoice/venv/bin/python scripts/edge-tts-server.py`（8500）。TTS_OPENAI_BASE_URL 指向 127.0.0.1:8500，8500 没起时 /api/generate/tts 会失败 |
+| 整机重启后 3000 全挂（G95 实证，2026-10-07） | 按序拉起：① `open -a Docker` 等 daemon；② `cd /Volumes/macext/code/demo/OpenMAIC && docker compose --profile server-persistence --profile video-export up -d`（只起 postgres+render-service）；③ **app 必须宿主跑** `npm run start`（日志 `/private/tmp/z1000/next-start.log`，重建目录）——compose 里的 openmaic 服务挂的是空命名卷，起它会 404 所有已有 classroom（`Classroom not found`），务必 `docker compose stop openmaic`；④ TTS：`env -u TMPDIR /Volumes/macext/code/demo/VibeVoice/venv/bin/python scripts/edge-tts-server.py`（8500；`env -u TMPDIR` 剥离任务级临时目录，否则目录被清后 MiMo 转 mp3 写临时文件会 500）。TTS_OPENAI_BASE_URL 指向 127.0.0.1:8500，8500 没起时 /api/generate/tts 会失败 |
 
 ## 串行与成本纪律
 
