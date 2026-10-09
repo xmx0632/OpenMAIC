@@ -180,7 +180,15 @@ def _generate(text: str, voice_wav: str) -> str:
         audio = audio.detach().cpu().to(torch.float32).numpy()
     pcm = (np.clip(audio, -1.0, 1.0) * 32767).astype("<i2").tobytes()
 
-    fd, tmp = tempfile.mkstemp(suffix=".vv.part.wav")
+    # 2026-10-09 固定临时目录（与 edge-tts-server._tts_tmp_dir 同口径）：
+    # 不随 TMPDIR 走，避免任务级临时目录被清理后 mkstemp 失败
+    tmp_dir = os.environ.get("TTS_TMP_DIR") or os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "tts-tmp")
+    try:
+        os.makedirs(tmp_dir, exist_ok=True)
+    except OSError:
+        tmp_dir = "/tmp"
+    fd, tmp = tempfile.mkstemp(suffix=".vv.part.wav", dir=tmp_dir)
     with os.fdopen(fd, "wb") as f:
         with wave.open(f, "wb") as w:
             w.setnchannels(1)

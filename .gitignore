@@ -103,3 +103,6 @@ __pycache__/
 # local TTS server isolated venv
 scripts/venv/
 demo/tts-output/*.mp3
+
+# fixed TTS temp dir (2026-10-09, ZOO-2091): wav->mp3 scratch, safe to wipe
+scripts/tts-tmp/

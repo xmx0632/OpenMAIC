@@ -469,11 +469,25 @@ def _vv_idle_watchdog():
 threading.Thread(target=_vv_idle_watchdog, daemon=True).start()
 
 
+def _tts_tmp_dir() -> str:
+    """固定临时目录（2026-10-09，ZOO-2091 用户指定）：不再跟随 TMPDIR——
+    服务从 Multica 任务会话启动会继承任务级 TMPDIR，任务结束后该目录被平台
+    清理，此处写 wav/mkv 即 500。默认脚本旁 tts-tmp/（每次调用自愈重建），
+    TTS_TMP_DIR 环境变量可覆盖，极端不可写时回退 /tmp。"""
+    d = os.environ.get("TTS_TMP_DIR") or os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "tts-tmp")
+    try:
+        os.makedirs(d, exist_ok=True)
+        return d
+    except OSError:
+        return "/tmp"
+
+
 def _wav_to_mp3(wav_bytes: bytes) -> bytes:
     import subprocess
     import tempfile
 
-    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+    with tempfile.NamedTemporaryFile(suffix=".wav", dir=_tts_tmp_dir(), delete=False) as f:
         f.write(wav_bytes)
         wav_path = f.name
     try:
