@@ -24,12 +24,14 @@ license: MIT
 - 课堂页翻页用底部 "Next scene" 按钮（`button[aria-label="Next scene"]`），ArrowRight 无效
 - 请求体一律由脚本 `JSON.stringify` 生成（等价 python3 json.dumps），中文内嵌引号手拼易坏 JSON
 - API key / `.env.local` 内容绝不写入任何文档或评论
-- **TTS 三引擎**（2026-09-19 起，`scripts/edge-tts-server.py`，文档 `openmaic/scripts/TTS-SERVER.md`）：Edge 秒出（alloy 晓晓女声等）+ MiMo 在线 API（2026-10-09 接入：`mimo-*` 预置与克隆音色，24kHz 秒级，API Key 内置零配置）+ VibeVoice 本地大模型（`vv-xinran` 欣然女声 / `vv-bowen` 博文男声 / `vv-anchen` 安辰带BGM / `vv-1`、`vv-2` 自定义克隆音色 / `vv-<自定义克隆音色>`）。服务须用 `/Volumes/macext/code/demo/VibeVoice/venv/bin/python` 启动；**从 Multica 任务会话启动必须加 `env -u TMPDIR`**（否则服务继承任务级临时目录，任务结束后目录被清、MiMo 转 mp3 写临时文件即 500，2026-10-09 实证）；VibeVoice 首次请求约 40s 加载，常驻后 RTF~2x，适合高质量配音场景
-- **运行时切音色（免重启）**：生成请求加 `ttsVoice` 字段（`--flags '{"ttsVoice":"vv-xinran"}'`），优先级：请求参数 > TTS_VOICE 环境变量 > 默认 alloy。实测 vv-xinran 全链路生效
+- **TTS 三引擎**（2026-09-19 起，`scripts/edge-tts-server.py`，文档 `openmaic/scripts/TTS-SERVER.md`）：Edge 秒出（alloy 晓晓女声等）+ MiMo 在线 API（2026-10-09 接入：`mimo-*` 预置与克隆音色，24kHz 秒级，API Key 内置零配置）+ VibeVoice 本地大模型（`vv-xinran` 欣然女声 / `vv-bowen` 博文男声 / `vv-anchen` 安辰带BGM / `vv-1`、`vv-2` 自定义克隆音色 / `vv-<自定义克隆音色>`）。服务须用 `/Volumes/macext/code/demo/VibeVoice/venv/bin/python` 启动；wav→mp3 临时文件 **2026-10-09 起固定写 `scripts/tts-tmp/`（`TTS_TMP_DIR` 可覆盖，每次调用自愈重建；ZOO-2091 补丁，不再受任务级 TMPDIR 被清理影响）**，从 Multica 任务会话启动仍建议加 `env -u TMPDIR` 作为习惯性保险；VibeVoice 首次请求约 40s 加载，常驻后 RTF~2x，适合高质量配音场景
+- **运行时切音色（免重启）**：生成请求加 `ttsVoice` 字段（`--flags '{"ttsVoice":"vv-xinran"}'`），优先级：请求参数 > TTS_VOICE 环境变量 > 默认 alloy。实测 vv-xinran 全链路生效；`mimo-clone-*` 克隆音色同机制，通道直通 2026-10-09 验证（见「博物馆视频制作规范」节路线 B）
 
 ## TTS 音色设置（2026-09-19 新增）
 
 生成课程时可指定配音音色，三种方式按优先级生效：**请求参数 `ttsVoice` > 环境变量 `TTS_VOICE` > 默认 `alloy`**（晓晓女声）。全程无需重启服务。
+
+**指定音色直通生成（用户 2026-10-09 定规，红线）**：任务指定了配音音色（任何 8500 音色：`mimo-*` / `vv-*` / edge）时，生成请求必须带 `ttsVoice` 直通生成，成片课堂音轨即最终音色；**禁止「默认 alloy 生成整片 + 事后逐句重合成换音轨」的双份副本路线**——那是双倍 TTS 成本 + 对位/重渲染风险（G195 首跑曾因此多花 ~25 min 与一次重渲染）。唯一回退条件：直通通道故障，或克隆音色长尾（句均可达 ~30s、个别 90s+，随时段波动）把生成 job 顶到 45 分钟上限——回退时交付评论必须写明原因与证据。**已有成片仅换音色是另一场景**：不重新生成课堂，直接对现成 MP4 换音轨（`-c:v copy` 零重编码，2026-10-09 白桦版实测前后视频流 MD5 一致）。
 
 ```bash
 # skill 脚本方式（推荐）
@@ -59,7 +61,7 @@ TTS_VOICE=vv-xinran
 | `vv-2` | VibeVoice | 自定义克隆音色②（10s 样本，登记同上；ZOO-785 已实测 ttsVoice 全链路生效，含 tts-verify） |
 | `vv-<自定义名>` | VibeVoice | 克隆音色：5-10s 人声样音放 `openmaic/demo/voices/<名>.wav` 即用（与 `mimo-clone-<名>` 共用同一份样音） |
 
-注意：VibeVoice 音色首次请求约 40s 模型加载（之后常驻约 5GB 内存），单条生成约为音频时长 2 倍；整课 TTS 阶段会比 Edge 慢数分钟，属正常。Edge 音色适合快速迭代，VibeVoice 适合最终成片。MiMo 为在线 API，同音色延迟波动大（实测 1.3s~19s，服务端为主）；克隆样音从 wav 换 mp3 后韵律可能变化，相似度需人耳 A/B 抽查，不满意删对应 mp3 即回退。
+注意：VibeVoice 音色首次请求约 40s 模型加载（之后常驻约 5GB 内存），单条生成约为音频时长 2 倍；整课 TTS 阶段会比 Edge 慢数分钟，属正常。Edge 音色适合快速迭代，VibeVoice 适合最终成片。MiMo 为在线 API，**预置音色快且稳、克隆音色慢且波动大**（2026-10-09 三音色同文本交错实测：茉莉句均 1.6s / 白桦 1.4s，max ≤2.5s；clone-2 句均 30.6s、2.1~92.8s 剧烈波动——克隆样音 base64 随每次请求上传 + 克隆模型更重；闲置后克隆首句冷启也可达 ~80s）。对速度敏感且不指定克隆音色时优先预置音色（80 句串行仅 ~2 min，无需并发）；克隆音色批量走**并发 3**（2026-10-09 实测并行度 ~2.4x、偶发快速失败 500 重试即恢复、>3 无增量收益，详见「博物馆视频制作规范」节）并先发一句预热；克隆样音从 wav 换 mp3 后韵律可能变化，相似度需人耳 A/B 抽查，不满意删对应 mp3 即回退。
 
 ## 版本同步（改本 skill 后必做）
 
@@ -80,7 +82,7 @@ node openmaic-video.mjs all --requirement-file /tmp/req.txt
 ## 端到端流程（脚本已固化，勿手工跳步）
 
 1. **预检**：`/api/health` 服务在线；`/api/export-video/capability` 查渲染可用性（不可用自动降级为教学资源包+课堂 ZIP）
-2. **提交生成**：requirement = 强制规范块（脚本自动拼接）+ 需求正文
+2. **提交生成**：requirement = 强制规范块（脚本自动拼接）+ 需求正文；任务指定配音音色时必须同时传 `ttsVoice` 直通（见「TTS 音色设置」红线，不得默认音色双份副本）
 3. **轮询**：30s 间隔，超 45 分钟判超时
 4. **场景类型校验**（合规红线）：`GET /api/classroom?id=<id>` 读 `scenes[].type`，**必须全部为 `slide`**；发现 `quiz`/`interactive`/`pbl` → 脚本退出码 3，视为不合规需重生成（见下）。同时报告配图覆盖（X/Y 页有插图）；开启配图却为 0 张时打警告（多为硅基流动日额度耗尽，课程仍可用）
 5. **聚光灯 soften（ZOO-551 起强制）**：脚本在校验后、任何页面访问/导出前，自动给全部 spotlight 动作写入 `dimOpacity=0.15`（幂等，双存储同步）。背景：默认 0.5 的暗幕在知识点高亮时画面大面积过暗，用户明确要求全线路按 0.15。openMAIC 侧默认值（引擎/描述符/store）已于 ZOO-551 一并改为 0.15 并重建，此处是数据级保险带；**不要用 `--no-constraints` 之类的方式绕过，也不要手工改回高暗度**
@@ -106,9 +108,40 @@ requirement 头部固定拼接以下约束块（`--no-constraints` 仅限调试�
 3. **最后一页必须是结尾页**：总结 3~5 个要点 + 一句行动指引，不允许戛然而止
 4. **配图规范**（ZOO-511）：封面页必须有 1 张贴合主题的插画，正文每页最多 1 张；统一扁平矢量插画风格、色调贴合主题；插画内不出现文字、不用照片风；**外部配图嵌入前统一展平为不透明 RGB**——视频渲染对 RGBA 透明通道 PNG 合成异常（错位变形，ZOO-791 曾重渲染 3 次定位），出图单注明「不透明背景」或预处理 `ffmpeg -i in.png -vf format=rgb24 out.png`
 5. **口播开场规范**（用户 2026-09-16 指定，ZOO-548）：任何页的口播开头都不说「大家好」等问候语；整个视频开头不用「这节课我们……」课堂式说法，改用「今天我们来看看……」「我们来了解一下……」等自然表述；后续各页用过渡句直接进入内容
-6. **口播字数硬约束**（ZOO-612 教训，2026-09-17）：每页口播 ≤150 字、全片合计 ≤900 字——F14 首次生成因无字数约束产出 9 分 52 秒超长片、付费重生成一次，此后作为注入块硬约束
+6. **口播字数硬约束**（ZOO-612 教训，2026-09-17）：每页口播 ≤150 字、全片合计 ≤900 字——F14 首次生成因无字数约束产出 9 分 52 秒超长片、付费重生成一次，此后作为注入块硬约束。**长片规格（博物馆片等，总预算 >900 字）必须在需求正文显式写双上限（总字数 + 单页字数）并以正文为准**，生成后导出前实测校验（见「博物馆视频制作规范」节）——ZOO-2091 只给总量上限时 GLM 产出 2977 字超 2200 上限、单页 700 字，在旧稿上白渲染一次后才发现
 
 需求正文写法见 `templates/requirement-template.md`（场景数上限要写"含封面与结尾页"）。
+
+## 博物馆视频制作规范（G 批口径，ZOO-2091 教训 2026-10-09 固化）
+
+博物馆介绍片（地图动效开场 + 指定克隆音色全程配音 + 拼接完整版）在通用流程之上叠加本节。ZOO-2091 首跑实测约 105 分钟：生成 17.5 min + mimo 逐句重合成 ~25 min（80 句）+ 口播超限返工 ~30 min + MP4 渲染 2 次 ~10 min + 拼接收尾。根因两条：**字数超限在渲染后才发现**、**克隆音色走了「先生成后重合成」的双重 TTS**。按下述规范执行，目标全程 35~45 分钟。
+
+1. **前置事实核对**：展项名/年代/开放时间逐条联网核实官方来源（馆方/民政局官网），易变信息口播带「以官方当期公告为准」；推测与已证分开，拿不准的宁可不讲
+2. **口播预算双上限写进 requirement 正文**：总量 ≤2200 字（8 分钟内，**硬线**）+ 单页 ≤350 字（**节奏参考线**，内容密的可放宽到 400；7 页规格默认，页数不同按 总预算/页数 折算）
+3. **生成后、任何导出/渲染前的字数实测校验（红线）**：
+   ```bash
+   curl -s "http://localhost:3000/api/classroom?id=<id>" | python3 -c "
+   import json,sys
+   c=json.load(sys.stdin); c=(c.get('data') or {}).get('classroom') or c.get('classroom')
+   tot=0
+   for s in c['scenes']:
+       n=sum(len(a.get('text','')) for a in s.get('actions',[]) if a.get('type')=='speech')
+       tot+=n; print('s%s %s: %d字%s'%(s.get('order'),s.get('title','')[:12],n,'  <-- 超单页上限' if n>350 else ''))
+   print('total:',tot)"
+   ```
+   **总量超硬线 → 必须改**：ttsfix 模式逐句替换终稿并重合成课堂音轨（改 `text` + `audioId` 加版本后缀防缓存 + 文件库/persistence 双同步，样板 `scripts/dy09-ttsfix.mjs` / ZOO-2091 任务内 `g195-ttsfix.mjs`）；单页超参考线 → 复查节奏再定，不强制返工。**终稿未过校验禁止第一次 MP4 渲染**——文本一改时间窗全变，渲染必作废（ZOO-2091 白渲染一次 ≈5 min + 资源包重导）
+4. **指定音色必须生成期直通（路线 B；用户 2026-10-09 定规，通道已验证）**：`--flags '{"ttsVoice":"mimo-clone-2","enableImageGeneration":false}'` 直接生成，课堂音轨即最终音色，免「逐句重合成 + VAD/DP 对位 + 换轨」全套后处理（~25 min），**不得用默认音色生成双份副本**。单句直通实测：`POST /api/generate/tts`，body `{"text":"...","audioId":"...","ttsProviderId":"openai-tts","ttsVoice":"mimo-clone-2"}` 返回正常音频（54KB/12 字）。预置音色直通零风险（句均 ~1.5s）；克隆音色注意长尾（实测句均 30.6s、个别 90s+，随时段波动）——提交后盯 job 计时，TTS 阶段明显拖长有顶到 45 分钟上限的风险，此时回退路线 A 重来（生成计费，判断要快）并在交付评论写明原因
+5. **路线 A（回退）排程原则**：地图动效、配图出图、口播终稿全部塞进生成轮询等待窗口并行做；mimo 逐句重合成与首次渲染并行排程，不串行等；换轨画面流 `-c:v copy` 零重编码
+   - **mimo 逐句合成按并发 3 提交**（用户 2026-10-09 指定上限 3；当日实测：ThreadPool(3) 并行度 1.75~2.4x，6 句 12.7s vs 串行 32.9s，外推 80 句块 7.3→2.8 min）
+   - 偶发**快速失败型 HTTP 500**（1.5~2s 即返回，8500 服务未捕获 MiMo 上游异常所致，响应体无细节）属瞬态：间隔 2s 重试一次即恢复（实测并发3+重试1次 6/6 全过）；ttsfix 类逐句重合同样适用
+   - 并发完成乱序属正常：**按句序编号落盘，组装按 index 对位**，禁止依赖完成顺序
+   - 不要超 3：c5 实测并行度 2.71x，相对 c3 无增量收益
+   - 克隆音色闲置后**首句冷启可达 ~80s**（MiMo 模型冷启）：批量前先发一句预热，勿误判卡死
+6. **地图动效开场**：卫星俯冲 → 交叉淡化切标准色路网 → 落针/路线/标题卡，13~15s；再入式音效/落地沉击本地 numpy 合成（零版权）；「© 高德地图」署名保留；最近地铁站/到馆路线以高德当期数据核实，口径与正片攻略段一致
+7. **实拍素材**（用户 2026-10-09 起要求可加入）：按「网络素材搜集与授权」节执行——官方渠道/CC 优先、来源台账、入库质检（字幕轨剥离、烧录字幕 1fps 扫描），版权不明不硬拼、降级为官方图片或原创示意并注明
+8. **拼接质检五项**：时长 Δ≤0.5s；拼接点 8 帧抽检无黑帧；响度 LUFS 连续对齐；口播互相关 ≥0.99；编码参数全程一致
+9. **落盘**：`/Volumes/macext/downloads`（未挂载回退 ~/Downloads）+ ~/Downloads 镜像；原片 MP4/教学资源包 + `<词干>-完整版-<YYYYMMDD>.mp4`
+10. **交付证据**：质检数据表 + 拼接点抽帧 + 音效来源声明 + 音色合成路线与调用记录（证明全程走 8500 服务、音色未偷换）+ 配图清单（注明非展品实景）
 
 ## TTS 读音校验（tts-verify，2026-09-20 起新增）
 
@@ -173,6 +206,7 @@ requirement 头部固定拼接以下约束块（`--no-constraints` 仅限调试�
 | 重导出后 PPTX/MP4 里图片消失（无图版） | 课堂页被访问过后 persistence 文档库与文件库是双存储：改嵌图/换图 URL 后必须**同步 persistence 文档库**，否则页面按文档库旧 URL 渲染、跨域取图失败产出无图成品（ZOO-756 v2 的 f28-urlswap.mjs 已内置同步，复用该模式） |
 | 提交前不确定是否有别的 job 在跑 | 先确认服务日志真身：`lsof -iTCP:3000 -sTCP:LISTEN` 找到监听进程，再看其 1w/2w 指向的文件（**2026-10-02 起实际日志是 `/private/tmp/z1000/next-start.log`，`zoo456-logs/server.log` 已停更于 09-26，别再拿旧文件判队列**；ZOO-1272 实测）。判队列口径：以最近 45 分钟窗口内 `Using server-configured model`（提交）、`Classroom persisted:`（完成）、`[ERROR] ... Classroom`（失败）计数，提交数 > 完成数+失败数 → 有 job 在跑；以 `Generated N scene outlines (… courseTitle: <名>)` 行认 job（带课程名，可区分是哪个课堂），再看其后有无该 job 的 `succeeded/failed`；最近 45 分钟内有未完结的 outlines 行 → 有 job 在跑，等它结束。**注意 `render/<uuid>` 下载轮询行是 MP4 渲染不是生成，不能当作生成活跃的证据**（ZOO-576 曾因此误判并行） |
 | 整机重启后 3000 全挂（G95 实证，2026-10-07） | 按序拉起：① `open -a Docker` 等 daemon；② `cd /Volumes/macext/code/demo/OpenMAIC && docker compose --profile server-persistence --profile video-export up -d`（只起 postgres+render-service）；③ **app 必须宿主跑** `npm run start`（日志 `/private/tmp/z1000/next-start.log`，重建目录）——compose 里的 openmaic 服务挂的是空命名卷，起它会 404 所有已有 classroom（`Classroom not found`），务必 `docker compose stop openmaic`；④ TTS：`env -u TMPDIR /Volumes/macext/code/demo/VibeVoice/venv/bin/python scripts/edge-tts-server.py`（8500；`env -u TMPDIR` 剥离任务级临时目录，否则目录被清后 MiMo 转 mp3 写临时文件会 500）。TTS_OPENAI_BASE_URL 指向 127.0.0.1:8500，8500 没起时 /api/generate/tts 会失败 |
+| mimo/vv 合成 500（写临时文件 FileNotFoundError，ZOO-2091 实证） | 根因：服务继承任务级 TMPDIR 且该目录事后被平台清理（精确复现：首次调用缓存 TMPDIR → 目录被删 → 后续调用 FileNotFoundError）。**2026-10-09 已根治**：`edge-tts-server.py` 与 `vv_worker.py` 的临时文件固定写 `scripts/tts-tmp/`（`TTS_TMP_DIR` 可覆盖、每次调用自愈重建，已加 .gitignore），**重启 8500 服务后生效**；未重启的旧实例应急：`ps eww $(lsof -tiTCP:8500 -sTCP:LISTEN) \| tr ' ' '\n' \| grep '^TMPDIR='` 找到该路径 `mkdir -p` 之，或按上行④从持久终端重启 |
 
 ## 串行与成本纪律
 
