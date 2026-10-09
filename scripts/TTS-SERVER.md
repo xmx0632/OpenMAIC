@@ -46,7 +46,7 @@ scripts/venv/Scripts/python.exe scripts/edge-tts-server.py
 |----------|------|------|
 | `mimo-冰糖` / `mimo-茉莉` / `mimo-苏打` / `mimo-白桦` | 预置中文音色 | 冰糖/茉莉女声，苏打/白桦男声 |
 | `mimo-Mia` / `mimo-Chloe` / `mimo-Milo` / `mimo-Dean` | 预置英文音色 | Mia/Chloe 女声，Milo/Dean 男声 |
-| `mimo-clone-<样音名>` | 音色克隆 | 样音与 VibeVoice 克隆音色共用项目内目录 `demo/voices`：放 `<样音名>.wav`（5-10s 清晰人声，也支持 mp3/m4a/flac），即 `vv-<样音名>` 和 `mimo-clone-<样音名>` 用的是同一份样音 |
+| `mimo-clone-<样音名>` | 音色克隆 | 样音与 VibeVoice 克隆音色共用项目内目录 `demo/voices`：放 `<样音名>.wav`（5-10s 清晰人声，也支持 mp3/m4a/flac），即 `vv-<样音名>` 和 `mimo-clone-<样音名>` 用的是同一份样音。**同名 mp3 优先于 wav**（上传体积小、请求更快）：建议 `ffmpeg -i <名>.wav -b:a 128k <名>.mp3` 预转换一份放旁边；wav 仍保留给 vv- 用 |
 
 配置（写 `scripts/.env`，已被 .gitignore 忽略；真实环境变量优先）：
 - `MIMO_API_KEY`：MiMo API Key；代码已内置默认 Key（macOS/新环境零配置可直接用 `mimo-*`），仅换 Key 时才需要设置（.env 或环境变量均可）

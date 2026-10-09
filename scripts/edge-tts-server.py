@@ -247,7 +247,10 @@ MIMO_CLONE_MODEL = os.environ.get("MIMO_CLONE_MODEL", "mimo-v2.5-tts-voiceclone"
 
 # 预置音色（官方文档，大小写不敏感匹配）
 MIMO_VOICES = ["冰糖", "茉莉", "苏打", "白桦", "Mia", "Chloe", "Milo", "Dean"]
-_MIMO_MIME = {".wav": "audio/wav", ".mp3": "audio/mpeg", ".m4a": "audio/mp4", ".flac": "audio/flac"}
+# 样音查找顺序 = 字典序：同名 mp3 优先于 wav（mp3 上传体积约 1/3~1/6，克隆质量 128k 足够），
+# wav 保留作为 VibeVoice vv-<名> 的样音与 mimo 兜底；预转换命令：
+#   ffmpeg -i <名>.wav -b:a 128k <名>.mp3
+_MIMO_MIME = {".mp3": "audio/mpeg", ".wav": "audio/wav", ".m4a": "audio/mp4", ".flac": "audio/flac"}
 
 _MIMO = {"client": None, "lock": threading.Lock()}
 
