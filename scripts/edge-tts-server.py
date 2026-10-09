@@ -7,7 +7,7 @@
   Edge 引擎（默认，免费秒出）：
     alloy/nova/shimmer/... 见下方 VOICE_MAP（中文神经语音）
 
-  MiMo 引擎（小米 MiMo 在线 API，音质好，需 MIMO_API_KEY）：
+  MiMo 引擎（小米 MiMo 在线 API，音质好；API Key 已内置默认值，可用 MIMO_API_KEY 覆盖）：
     mimo-冰糖 / mimo-茉莉 / mimo-苏打 / mimo-白桦        预置中文音色
     mimo-Mia / mimo-Chloe / mimo-Milo / mimo-Dean        预置英文音色
     mimo-clone-<样音名> → demo/voices/<样音名>.wav        音色克隆（参考音频 5-10s
@@ -31,7 +31,7 @@
   PORT=9000 ...                                                 # 自定义端口
 
 环境变量（可写入脚本同目录 .env，真实环境变量优先）：
-  MIMO_API_KEY     MiMo API Key（用 mimo-* 音色时必需）
+  MIMO_API_KEY     MiMo API Key（不设则用代码内置默认 Key，零配置可用）
   MIMO_BASE_URL    默认 https://api.xiaomimimo.com/v1
   CLONE_VOICE_DIR  克隆样音库目录（默认 <项目根>/demo/voices，vv- 与 mimo-clone- 共用）
   VIBEVOICE_DIR   VibeVoice 代码目录（macOS 沿用原固定路径 /Volumes/macext/code/demo/VibeVoice，
@@ -189,6 +189,7 @@ async def health():
         "provider": "edge-tts + mimo + vibevoice",
         "mimo": {
             "enabled": bool(MIMO_API_KEY),
+            "key_source": "env" if os.environ.get("MIMO_API_KEY", "").strip() else "default",
             "voices": ["mimo-冰糖", "mimo-茉莉", "mimo-苏打", "mimo-白桦",
                         "mimo-Mia", "mimo-Chloe", "mimo-Milo", "mimo-Dean",
                         "mimo-clone-<样音名>"],
@@ -236,7 +237,10 @@ VV_REQUEST_TIMEOUT_SEC = float(os.environ.get("VV_REQUEST_TIMEOUT_SEC", "1200"))
 # 不影响 Edge / VibeVoice 引擎。文档:
 # https://mimo.mi.com/docs/zh-CN/quick-start/usage-guide/audio/speech-synthesis-v2.5
 # ---------------------------------------------------------------------------
-MIMO_API_KEY = os.environ.get("MIMO_API_KEY", "").strip()
+# MiMo API Key：内置主人自有 Key 作为默认值（macOS/新环境零配置可用 mimo-*）；
+# 需要换 Key 时用环境变量 MIMO_API_KEY 或 scripts/.env 覆盖
+_MIMO_KEY_DEFAULT = "sk-c548dcue6vvym2aoq8obmbsbs9j0r3ui0hn5ogx3ge46wjda"
+MIMO_API_KEY = (os.environ.get("MIMO_API_KEY") or _MIMO_KEY_DEFAULT).strip()
 MIMO_BASE_URL = os.environ.get("MIMO_BASE_URL", "https://api.xiaomimimo.com/v1").strip()
 MIMO_TTS_MODEL = os.environ.get("MIMO_TTS_MODEL", "mimo-v2.5-tts").strip()
 MIMO_CLONE_MODEL = os.environ.get("MIMO_CLONE_MODEL", "mimo-v2.5-tts-voiceclone").strip()

@@ -15,7 +15,8 @@ scripts/venv/Scripts/python.exe scripts/edge-tts-server.py
 #          VV_IDLE_UNLOAD_SEC（默认900，vv worker 空闲多少秒自动退出）/ VV_REQUEST_TIMEOUT_SEC（默认1200）
 # VibeVoice 路径默认值按平台区分：macOS 自动沿用原部署固定路径（/Volumes/macext/...，原环境免配置），
 # 其他平台默认项目相对路径（<项目根>/../VibeVoice），均可覆盖
-# MiMo 配置写在本目录 .env（MIMO_API_KEY / CLONE_VOICE_DIR），真实环境变量优先
+# MiMo 配置写在本目录 .env（MIMO_API_KEY / CLONE_VOICE_DIR），真实环境变量优先；
+# MIMO_API_KEY 不配置也可用（代码内置默认 Key，零配置直接 mimo-*）
 ```
 
 ## 音色路由（按 voice 名自动分发）
@@ -48,7 +49,7 @@ scripts/venv/Scripts/python.exe scripts/edge-tts-server.py
 | `mimo-clone-<样音名>` | 音色克隆 | 样音与 VibeVoice 克隆音色共用项目内目录 `demo/voices`：放 `<样音名>.wav`（5-10s 清晰人声，也支持 mp3/m4a/flac），即 `vv-<样音名>` 和 `mimo-clone-<样音名>` 用的是同一份样音 |
 
 配置（写 `scripts/.env`，已被 .gitignore 忽略；真实环境变量优先）：
-- `MIMO_API_KEY`：MiMo API Key，未配置时仅 `mimo-*` 请求报 503，不影响其他引擎
+- `MIMO_API_KEY`：MiMo API Key；代码已内置默认 Key（macOS/新环境零配置可直接用 `mimo-*`），仅换 Key 时才需要设置（.env 或环境变量均可）
 - `CLONE_VOICE_DIR`：克隆样音库目录，默认项目内相对路径 `demo/voices`（一般无需设置）
 
 特点：在线 API 无需本地 GPU、响应快（秒级）、24kHz 输出自动转 mp3/wav。忽略 speed 参数。
