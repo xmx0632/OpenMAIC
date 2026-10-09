@@ -1,5 +1,11 @@
 > 本文件是 `~/.claude/skills/openmaic-video-gen/SKILL.md` 的仓库存档副本（版本同步用）；实际生效以本机 skills 目录为准，配套脚本在 skill 目录的 scripts/ 下。
 
+---
+name: openmaic-video-gen
+description: "用本机 openMAIC 服务制作视频教程并导出 MP4/教学资源包的端到端流水线：提交生成→轮询→场景类型校验（全 slides、无 quiz/PBL）→封面结尾截图→导出教学资源包(内含PPTX+交互页,2026-09-21起不再单独导出PPTX)→渲染 MP4→落盘 /Volumes/macext/downloads（移动硬盘专用目录,未挂载时回退 ~/Downloads）。Triggers: 用 openMAIC 做视频教程、生成课堂、导出 mp4/教学资源包/pptx、制作课程视频、openmaic。"
+license: MIT
+---
+
 # openMAIC 视频教程端到端制作与导出
 
 ## 触发场景
@@ -11,6 +17,7 @@
 
 - 本机服务 `http://localhost:3000`（OpenMAIC v1.0.1，`/Volumes/macext/code/demo/OpenMAIC`），默认模型 GLM `glm-5.3-flash`（超时已修复，ZOO-456），健康检查 `GET /api/health`
 - 生成 API：`POST /api/generate-classroom`，body `{requirement, enableTTS, enableImageGeneration, enableVideoGeneration, enableWebSearch}` → 202 返回 `{jobId, pollUrl}`；轮询 pollUrl 30~60s 一次，`done:true`（或 `status:succeeded`）时 `result.url` 为课堂地址。**默认 `enableImageGeneration: true`**（ZOO-511 起接入硅基流动 Kwai-Kolors/Kolors，服务端已限流 2 张/分钟；关闭用 `--flags '{"enableImageGeneration":false}'`）。**配图由绘图codex 外部提供的流程（ZOO-515 默认）提交时必须显式传该 flags**——脚本默认 true 会混入内置生成图，F28（ZOO-756）曾因此占位图残留成片、被大类验收退回
+- **出图单并发生成（ZOO-972 系列 2026-09-26 用户确认）**：给绘图codex 的出图单 requirement 必须写明「多张互不依赖的配图并发生成：同一脚本单元并发提交多个生图调用，每张仍是独立调用、独立核验，不要逐张串行」。背景：绘图codex 的调度并发（4）按「单」计，单内串行只是它的工作习惯、非平台限制（ZOO-1002 实测 2 张串行约 35 分钟，其中约 25 分钟是思考间隙）；并发可把关键路径压近单图耗时。首单先 2 并发试跑、稳定再加；不拆一图一单占多个调度位
 - 耗时基线（2026-09-26 起生产启用场景并发 `PARALLEL_SCENE_CONCURRENCY=3`，ZOO-986 实测后改写）：大纲约 1.5 分钟 + 场景阶段（7 场景 G 规格）约 17~19 分钟（c=1 串行口径为 47 分钟）+ TTS/媒体/落盘，**6~7 场景课堂全程约 20~25 分钟**（旧口径「单场景 4~8 分钟、全程约 30 分钟」作废）；场景完成顺序可能乱序（日志 Scene k/N 行乱序属正常），入库与成片顺序仍严格按大纲序；**开配图时媒体阶段每张间隔 ≥33 秒串行生成（2 IPM 限流），10 页课程约多 5~6 分钟，属正常不要当成卡死**；**单 job 上限 45 分钟；严格串行，一次只跑一个 job**（并发是 job 内场景级，全局「一次一个 job」不变）
 - MP4 渲染：`GET /api/export-video/capability` 返回 `enabled:true` 时可用（渲染走课堂 ZIP 上传 `/api/export-video/render`，由课堂页自动完成）；渲染时长≈课堂时长
 - **PPTX 无服务端端点**（pptxgenjs 浏览器端组装），教学资源包与 MP4 的导出 ZIP 也在浏览器端组装——所以导出一律用 playwright 驱动课堂页点按钮，不要试图复刻前端请求
@@ -109,9 +116,33 @@ requirement 头部固定拼接以下约束块（`--no-constraints` 仅限调试�
 
 - **为什么**：VibeVoice 是扩散式生成 TTS，同一文本多次合成结果随机，偶发整段发糊/音节粘连/句尾杂音的坏 take（文本管线正确也会发生；F29 实测同句文字出现过 3.1s 与 5.0s 两个版本、4.8s 与 13s 失控版）。符号变音与数字念英文属文本管线问题，已在 8500 服务修复；采样坏 take 只能合成后校验兜住
 - **怎么做**：whisper-medium 逐条转写课堂口播 mp3 → 与口播文本做**拼音音节级**比对（同音字转写差异不算错）→ 差异率超 15% 判坏；`--fix` 时对坏条目重录 `--takes` 个 take、逐个 ASR 复验，自动用零/最低差异 take 覆盖课堂音频文件（内含时长/字数 >0.55s/字 的失控看门狗；2026-09-20 G52 教训：**选 take 优先「rate 达标且语速在 0.17–0.33s/字 正常带」的理想 take 直接采用**——ASR 内容全对但语速拖到 0.39–0.45s/字 的慢速 take 会漏过 0.55 看门狗，人耳一听就是毛病）
-- **纪律**：只有 vv-\*（VibeVoice）音色需要本步骤，出片前必跑 `--fix`；换过 take 的课堂必须重新 export 才进成片。Edge 音色（alloy/晓晓等）确定性合成、无坏 take 模式，直接跳过 tts-verify
+- **纪律**：只有 vv-\*（VibeVoice）音色需要本步骤，出片前必跑 `--fix`；换过 take 的课堂必须重新 export 才进成片。Edge 音色（alloy/晓晓等）确定性合成、无坏 take 模式，直接跳过 tts-verify。**issue 规范强制要求 Edge 课堂也跑时，必须显式 `--voice alloy`**——脚本 `--voice` 默认 `vv-xinran`，不传会把修复 take 换成异音色混进 alloy 成片（DY08，2026-10-02）；另注意 whisper+vv 合成争抢 CPU 偶发 300s 合成超时崩溃（未写入任何文件，重跑即可）
+- **数字假阳性（DY08 实证，2026-10-02）**：含年份/年龄的口播会被 whisper 时而转写成阿拉伯数字（「一百七十」→「170」）、时而写成汉字（「550」→「五百五十」），与参考文本书写口径不一致即超阈值——音频本身读音正确。判别法：对超阈值条目把两侧数字归一成中文读数后重算拼音音节差（DY08 三条 0.20/0.24/0.64 → 0.00/0.06/0.00 全过），且 Edge 的 3 个重合成 take 与原音频逐字节一致即为确定性佐证；证据落 `*-artifact-check.txt` 随交付引用
 - **局限（如实）**：ASR 非金标准，声调级细微出入判不了；「校验通过」= 把坏 take 概率压到极低（坏 take × ASR 漏检的交集），最终验收仍靠人耳抽查
 - 报告落 `tts-verify-report.json`（每条 rate/asr/fixed），随交付证据引用
+- **多音字（G95 教训，2026-10-07）**：Edge/alloy 也会念错多音字——「藏在」念成 zàng。引擎不会按语境猜对，须改词重合成：藏在→隐藏在（强制 cáng），成片后 ASR 抽该窗口验证转写含「隐」；课堂音频/文本/持久化三层同步（样板 `g95v5-ttsfix.mjs` 模式）后必须重新 export。写口播稿时主动避开裸多音字（藏/传/降/差点/行李）
+
+## 网络素材搜集与授权（拼接前置，G95 口径固化）
+
+用户要求"搜网上视频/图片素材做拼接"时，先按本节完成素材入库，再走下一节拼接纪律：
+
+1. **来源优先级**：① 官方渠道（nobelprize / NASA / NSF / 各领域官网及官方频道、NASA Images、Internet Archive）→ ② 明确 CC / 公共领域库（Wikimedia Commons 等，记清 CC BY / CC BY-SA 版本与署名人）→ ③ 版权不明确或不可下载的**不硬拼**，降级为官方公布图片（角标来源）或原创示意图/动画，并在交付说明注明降级原因
+2. **逐段记录来源台账**：素材名 + 来源 URL + 授权口径（CC x.x / PD / 官方新闻素材）+ 下载日期，交付时附《素材来源授权清单》；任何一段来源说不清就不用
+3. **下载后入库质检（用前必做）**：`ffprobe -select_streams s` 查字幕轨（有软字幕轨的剥离或弃用）；视频素材对**计划使用的区间** 1fps 抽帧扫烧录字幕/水印（烧录中文或其他文字又去不掉的段，换素材或裁掉窗口）；图片素材检查分辨率 ≥1080p、无大面积水印
+4. **图片素材拼接**：静态图先展平为不透明 RGB（RGBA 合成错位坑，同强制规范第 4 条），动态化用 Ken Burns（横移 `scale=-2:2160,crop=1920:1080:x='min((in_w-1920)/2+t*<px>,in_w-1920)':y=0`；推近 `zoompan=z='1+0.0015*on':d=<frames>':...s=1920x1080:fps=30`，样板见 scripts/g95v5 拼接命令与 g95-capbar.py）
+5. 拼接执行、字幕、解说、验收一律走下一节「插入素材拼接纪律」——防中文乱码的三道闸（PIL 预渲染字幕条 / 模拟转码验收 / 源窗烧录字幕扫描）全部适用，不得因素材类型（视频/图片）省略
+
+## 插入素材拼接纪律（G95 ZOO-1858 教训，2026-10-07 起强制）
+
+网络素材后期插入成片（ffmpeg concat 拼接）时的红线，全部来自 G95 五轮返工实证：
+
+1. **字幕禁止 ffmpeg drawtext**：`.ttc` 字体集选面不稳 + 小字号在平台转码后必糊（用户观感即"乱码"）。一律 **PIL 预渲染字幕条 PNG 叠图**（`overlay=(W-w)/2:H-h-64`）：粗黑体 Hiragino Sans GB W6（`/System/Library/Fonts/Hiragino Sans GB.ttc` index 2；PingFang.ttc 在当前 macOS 无此路径），主行 ≥60px、来源行 ≥36px、描边 ≥3px、底板**近实心**（alpha ≥240——半透明底在高运动/暗噪声背景段必穿底糊化）。字幕条是像素图，不存在编码环节；"乱码"排查先 `ffprobe` 查有无字幕轨、再与源 PNG 做模板匹配（NCC ≥0.89 即一致）
+2. **字幕验收必须含模拟转码**：`scale=1280:720 CRF32` 与 `scale=960:540 CRF30` 两档重转码后抽字幕 crop 核可读，原生分辨率干净≠平台播放可读
+3. **插入段必须有配音解说**：无声插入即缺陷；每段配同音色解说（`/api/generate/tts`，openai-tts+alloy），段长按解说时长定
+4. **concat 音轨标号逐一对映**：filter 里 `[N:a]→[nx]` 与输入顺序必须人工核对（G95 v2 曾把 nc/nd/nb 绑错输入，解说错位+渐进失步）；装配后 silencedetect + whisper 逐窗验证解说对位
+5. **迭代交付附件必须带版本后缀**（如 `-v5-修正版.mp4`）：同名 MP4 附件在帖内累积后，验收人极易点开旧版，把已修复的问题误报为"仍在"，反馈口径会自相矛盾（G95 v4 就这样被误报过）
+6. **课堂重导出后时长会变**（音频集/垫整变化，G95 实测 248.3s→213.7s）：插入 trim 点禁止沿用旧值，必须 whisper 全片带时间戳转写后按**内容锚点**重定位，插在句间静音中点（`silencedetect -38dB` gap 的中点，口播零损失）
+7. **素材源窗逐秒扫烧录字幕**：使用区间内 1fps 扫描源素材，有不可去的水印/字幕段就换素材或裁掉
 
 ## 场景不合规时的重生成策略
 
@@ -135,8 +166,10 @@ requirement 头部固定拼接以下约束块（`--no-constraints` 仅限调试�
 | 下载卡住超时 | MP4 渲染上限默认 40 分钟（`--render-timeout-min` 可调）；确认渲染服务活着再重试，**勿对同一课堂并发发起多个渲染** |
 | MP4 渲染完成但文件没落到 /Volumes/macext/downloads | 两种情况：① 后台/沙箱 run 对工作目录之外的写入会被虚拟化丢弃——**导出落盘一律在前台 shell 执行，或 `--out-dir` 指到 workdir 内再前台 `cp` 到 /Volumes/macext/downloads**；交付前用独立的前台 `ls` 验证文件真实存在。② 渲染产物还在服务端：从服务日志找本次 render job 的 UUID（`grep -oE "render/[a-f0-9-]{36}" zoo456-logs/server.log | tail`），直接 `curl http://localhost:3000/api/export-video/render/<UUID>/download -o /Volumes/macext/downloads/<命名>.mp4` 找回，不必重渲染 |
 | 教学资源包/PPTX 丢了要重导 | 资源包与其中的 PPTX 都是浏览器端组装、服务端无存档，只能重跑：`node openmaic-video.mjs export --url <课堂地址> --skip-mp4`（约 1~3 分钟，不重新渲染 MP4） |
+| tts-verify 报 `KeyError: 'audioId'` | 生成器偶发漏合成极短口播槽位（DY09 s2「先说开国。」4 字无 audioId/audioUrl，成片会静音跳读）。修复：按命名惯例补 audioId，用同音色（如 alloy）`/api/generate/tts` 合成、写 mp3、回填 audioId+audioUrl 并双存储同步（样板 `scripts/dy09-ttsfix.mjs`）；修完重跑 tts-verify |
 | 重导出后 PPTX/MP4 里图片消失（无图版） | 课堂页被访问过后 persistence 文档库与文件库是双存储：改嵌图/换图 URL 后必须**同步 persistence 文档库**，否则页面按文档库旧 URL 渲染、跨域取图失败产出无图成品（ZOO-756 v2 的 f28-urlswap.mjs 已内置同步，复用该模式） |
-| 提交前不确定是否有别的 job 在跑 | `tail /Volumes/macext/code/demo/OpenMAIC/zoo456-logs/server.log`：以 `Generated N scene outlines (… courseTitle: <名>)` 行认 job（带课程名，可区分是哪个课堂），再看其后有无该 job 的 `succeeded/failed`；最近 45 分钟内有未完结的 outlines 行 → 有 job 在跑，等它结束。**注意 `render/<uuid>` 下载轮询行是 MP4 渲染不是生成，不能当作生成活跃的证据**（ZOO-576 曾因此误判并行） |
+| 提交前不确定是否有别的 job 在跑 | 先确认服务日志真身：`lsof -iTCP:3000 -sTCP:LISTEN` 找到监听进程，再看其 1w/2w 指向的文件（**2026-10-02 起实际日志是 `/private/tmp/z1000/next-start.log`，`zoo456-logs/server.log` 已停更于 09-26，别再拿旧文件判队列**；ZOO-1272 实测）。判队列口径：以最近 45 分钟窗口内 `Using server-configured model`（提交）、`Classroom persisted:`（完成）、`[ERROR] ... Classroom`（失败）计数，提交数 > 完成数+失败数 → 有 job 在跑；以 `Generated N scene outlines (… courseTitle: <名>)` 行认 job（带课程名，可区分是哪个课堂），再看其后有无该 job 的 `succeeded/failed`；最近 45 分钟内有未完结的 outlines 行 → 有 job 在跑，等它结束。**注意 `render/<uuid>` 下载轮询行是 MP4 渲染不是生成，不能当作生成活跃的证据**（ZOO-576 曾因此误判并行） |
+| 整机重启后 3000 全挂（G95 实证，2026-10-07） | 按序拉起：① `open -a Docker` 等 daemon；② `cd /Volumes/macext/code/demo/OpenMAIC && docker compose --profile server-persistence --profile video-export up -d`（只起 postgres+render-service）；③ **app 必须宿主跑** `npm run start`（日志 `/private/tmp/z1000/next-start.log`，重建目录）——compose 里的 openmaic 服务挂的是空命名卷，起它会 404 所有已有 classroom（`Classroom not found`），务必 `docker compose stop openmaic`；④ TTS：`/Volumes/macext/code/demo/VibeVoice/venv/bin/python scripts/edge-tts-server.py`（8500）。TTS_OPENAI_BASE_URL 指向 127.0.0.1:8500，8500 没起时 /api/generate/tts 会失败 |
 
 ## 串行与成本纪律
 
