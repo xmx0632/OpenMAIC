@@ -1,11 +1,18 @@
 #!/usr/bin/env python3
-"""edge-tts + VibeVoice 双引擎的 OpenAI 兼容包装服务。
+"""edge-tts + MiMo + VibeVoice 三引擎的 OpenAI 兼容包装服务。
 
 把语音合成暴露成 POST /v1/audio/speech（OpenAI TTS 格式），
-供 OpenMAIC 的 TTS_OPENAI 通道使用。两个引擎按 voice 名自动路由：
+供 OpenMAIC 的 TTS_OPENAI 通道使用。三个引擎按 voice 名自动路由：
 
   Edge 引擎（默认，免费秒出）：
     alloy/nova/shimmer/... 见下方 VOICE_MAP（中文神经语音）
+
+  MiMo 引擎（小米 MiMo 在线 API，音质好，需 MIMO_API_KEY）：
+    mimo-冰糖 / mimo-茉莉 / mimo-苏打 / mimo-白桦        预置中文音色
+    mimo-Mia / mimo-Chloe / mimo-Milo / mimo-Dean        预置英文音色
+    mimo-clone-<样音名> → demo/voices/<样音名>.wav        音色克隆（参考音频 5-10s
+                   清晰人声，wav/mp3/m4a/flac 均可；样音库为项目内相对目录
+                   demo/voices，与 vv-<自定义名> 克隆音色共用，可用 CLONE_VOICE_DIR 覆盖）
 
   VibeVoice 引擎（本地大模型，质量高，RTF 约 2x，worker 冷加载约 30-40s）：
     vv-xinran   → zh-Xinran_woman  中文女声，清晰自然（推荐）
@@ -18,19 +25,26 @@
   模型常驻 ~6.8GB 的问题随之根治——worker 空闲自动退出，进程退出即全额归还内存；
   本服务进程只做路由，不再 import torch，常驻 footprint ~80MB。
 
-用法（必须用 VibeVoice 的 venv 启动，两引擎共用）：
-  /path/to/VibeVoice/venv/bin/python edge-tts-server.py     # 监听 8500
-  PORT=9000 ...                                              # 自定义端口
+用法（Windows 推荐用本目录独立 venv 启动，三引擎共用）：
+  scripts/venv/Scripts/python.exe scripts/edge-tts-server.py   # Windows，监听 8500
+  /path/to/VibeVoice/venv/bin/python edge-tts-server.py        # Mac/Linux 旧方式
+  PORT=9000 ...                                                 # 自定义端口
 
-环境变量：
-  VIBEVOICE_DIR   VibeVoice 代码目录（默认本机路径）
-  VIBEVOICE_MODEL 1.5B 权重目录（默认本机路径）
-  VIBEVOICE_DISABLED=1  禁用 VibeVoice 引擎（纯 edge 模式，用系统 python 即可）
+环境变量（可写入脚本同目录 .env，真实环境变量优先）：
+  MIMO_API_KEY     MiMo API Key（用 mimo-* 音色时必需）
+  MIMO_BASE_URL    默认 https://api.xiaomimimo.com/v1
+  CLONE_VOICE_DIR  克隆样音库目录（默认 <项目根>/demo/voices，vv- 与 mimo-clone- 共用）
+  VIBEVOICE_DIR   VibeVoice 代码目录（macOS 沿用原固定路径 /Volumes/macext/code/demo/VibeVoice，
+                  其他平台默认 <项目根>/../VibeVoice；仅启用 vv 引擎时需要）
+  VIBEVOICE_MODEL 1.5B 权重目录（macOS 沿用原固定路径 /Volumes/macext/llm-model/models/VibeVoice-1.5B，
+                  其他平台默认 <VIBEVOICE_DIR>/VibeVoice-1.5B）
+  VIBEVOICE_DISABLED=1  禁用 VibeVoice 引擎（纯 edge+mimo 模式，依赖更少）
   VV_IDLE_UNLOAD_SEC=900   vv worker 空闲多少秒自动退出（默认 15 分钟）
   VV_REQUEST_TIMEOUT_SEC=1200  单次 vv 生成的父进程侧超时（防 worker 卡死）
 
-注意：VibeVoice 引擎忽略 speed 参数（Edge 引擎保持 1.25x 固定倍率）。
+注意：MiMo / VibeVoice 引擎忽略 speed 参数（Edge 引擎保持 1.25x 固定倍率）。
 """
+import base64
 import io
 import json
 import os
@@ -41,9 +55,25 @@ import time
 
 import edge_tts
 import uvicorn
-from fastapi import FastAPI, Response
+from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+
+
+def _load_env_file(path: str) -> None:
+    """极简 .env 加载：KEY=VALUE（# 注释、可带引号）；不覆盖已存在的真实环境变量。"""
+    if not os.path.isfile(path):
+        return
+    with open(path, "r", encoding="utf-8-sig") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, val = line.partition("=")
+            os.environ.setdefault(key.strip(), val.strip().strip('"').strip("'"))
+
+
+_load_env_file(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
 app = FastAPI(title="edge-tts OpenAI-compatible server")
 app.add_middleware(
@@ -127,6 +157,16 @@ async def speech(req: SpeechRequest):
                 return Response(content=wav, media_type="audio/wav")
             return Response(content=_wav_to_mp3(wav), media_type="audio/mpeg")
 
+    # MiMo 引擎路由（mimo-* 前缀；在线 API，音质好，需 MIMO_API_KEY）
+    mimo_spec = mimo_resolve_voice(req.voice)
+    if mimo_spec is not None:
+        from starlette.concurrency import run_in_threadpool
+
+        wav = await run_in_threadpool(mimo_generate, req.input, mimo_spec)
+        if req.response_format == "wav":
+            return Response(content=wav, media_type="audio/wav")
+        return Response(content=_wav_to_mp3(wav), media_type="audio/mpeg")
+
     # Edge 引擎（默认）
     voice = resolve_voice(req.voice)
     rate = speed_to_rate()
@@ -146,7 +186,13 @@ async def health():
     idle = int(time.time() - _VV_WORKER["last_active"]) if alive else None
     return {
         "status": "ok",
-        "provider": "edge-tts + vibevoice",
+        "provider": "edge-tts + mimo + vibevoice",
+        "mimo": {
+            "enabled": bool(MIMO_API_KEY),
+            "voices": ["mimo-冰糖", "mimo-茉莉", "mimo-苏打", "mimo-白桦",
+                        "mimo-Mia", "mimo-Chloe", "mimo-Milo", "mimo-Dean",
+                        "mimo-clone-<样音名>"],
+        },
         "vibevoice": {
             "enabled": not VIBEVOICE_DISABLED,
             "mode": "subprocess",
@@ -160,16 +206,133 @@ async def health():
 
 
 # ---------------------------------------------------------------------------
+# 引擎公共配置（环境变量，.env 已在文件头加载）
+# 目录一律用项目相对路径（基于 scripts/ 的上一级），os.path 拼接兼容 macOS/Windows；
+# 机器相关的真实路径需要覆盖时写进 .env 或环境变量
+# ---------------------------------------------------------------------------
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+VIBEVOICE_DISABLED = os.environ.get("VIBEVOICE_DISABLED") == "1"
+# VibeVoice 目录/模型默认值按平台区分：macOS 沿用原部署的固定路径（原环境不配
+# .env 也能直接跑）；其他平台（如 Windows）退回项目相对路径。均可用环境变量/.env 覆盖。
+if sys.platform == "darwin":
+    _VV_DIR_DEFAULT = "/Volumes/macext/code/demo/VibeVoice"
+    _VV_MODEL_DEFAULT = "/Volumes/macext/llm-model/models/VibeVoice-1.5B"
+else:
+    _VV_DIR_DEFAULT = os.path.join(PROJECT_ROOT, os.pardir, "VibeVoice")
+    _VV_MODEL_DEFAULT = os.path.join(_VV_DIR_DEFAULT, "VibeVoice-1.5B")
+VIBEVOICE_DIR = os.environ.get("VIBEVOICE_DIR", _VV_DIR_DEFAULT)
+VIBEVOICE_MODEL = os.environ.get("VIBEVOICE_MODEL", _VV_MODEL_DEFAULT)
+# 克隆样音库（项目内相对目录）：vv-<名字> 与 mimo-clone-<名字> 共用同一套样音
+CLONE_VOICE_DIR = os.environ.get(
+    "CLONE_VOICE_DIR", os.path.join(PROJECT_ROOT, "demo", "voices")
+)
+VV_IDLE_UNLOAD_SEC = int(os.environ.get("VV_IDLE_UNLOAD_SEC", "900"))
+VV_REQUEST_TIMEOUT_SEC = float(os.environ.get("VV_REQUEST_TIMEOUT_SEC", "1200"))
+
+
+# ---------------------------------------------------------------------------
+# MiMo 引擎（小米 MiMo 在线 API：预置音色 + 音色克隆）
+# 按需创建 OpenAI 兼容客户端（线程安全单例）；未配 Key 时仅 mimo-* 请求报 503，
+# 不影响 Edge / VibeVoice 引擎。文档:
+# https://mimo.mi.com/docs/zh-CN/quick-start/usage-guide/audio/speech-synthesis-v2.5
+# ---------------------------------------------------------------------------
+MIMO_API_KEY = os.environ.get("MIMO_API_KEY", "").strip()
+MIMO_BASE_URL = os.environ.get("MIMO_BASE_URL", "https://api.xiaomimimo.com/v1").strip()
+MIMO_TTS_MODEL = os.environ.get("MIMO_TTS_MODEL", "mimo-v2.5-tts").strip()
+MIMO_CLONE_MODEL = os.environ.get("MIMO_CLONE_MODEL", "mimo-v2.5-tts-voiceclone").strip()
+
+# 预置音色（官方文档，大小写不敏感匹配）
+MIMO_VOICES = ["冰糖", "茉莉", "苏打", "白桦", "Mia", "Chloe", "Milo", "Dean"]
+_MIMO_MIME = {".wav": "audio/wav", ".mp3": "audio/mpeg", ".m4a": "audio/mp4", ".flac": "audio/flac"}
+
+_MIMO = {"client": None, "lock": threading.Lock()}
+
+
+def _mimo_client():
+    if _MIMO["client"] is None:
+        with _MIMO["lock"]:
+            if _MIMO["client"] is None:
+                try:
+                    from openai import OpenAI
+                except ImportError:
+                    raise HTTPException(
+                        status_code=503,
+                        detail="openai 库未安装：请用 scripts/venv 中的 python 启动本服务",
+                    )
+                _MIMO["client"] = OpenAI(api_key=MIMO_API_KEY, base_url=MIMO_BASE_URL)
+    return _MIMO["client"]
+
+
+def _mimo_find_sample(name: str) -> str | None:
+    """在 CLONE_VOICE_DIR 里按常见扩展名找样音文件。"""
+    base = os.path.join(CLONE_VOICE_DIR, name)
+    for ext in _MIMO_MIME:
+        if os.path.isfile(base + ext):
+            return base + ext
+    return None
+
+
+def mimo_resolve_voice(name: str) -> tuple[str, object] | None:
+    """解析 mimo-* 音色，返回 ("preset", 音色名) 或 ("clone", 样音路径)；非 mimo-* 返回 None。"""
+    n = (name or "").strip()
+    if not n.lower().startswith("mimo-"):
+        return None
+    rest = n[5:]
+    if n.lower().startswith("mimo-clone-"):
+        sample = _mimo_find_sample(rest[6:])
+        if sample is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"MiMo 克隆样音不存在: {rest}（请在 {CLONE_VOICE_DIR} 放入 "
+                        f"{rest}.wav，5-10s 清晰人声，或用 CLONE_VOICE_DIR 指定样音目录）",
+            )
+        return ("clone", sample)
+    for v in MIMO_VOICES:
+        if rest.lower() == v.lower():
+            return ("preset", v)
+    raise HTTPException(
+        status_code=400,
+        detail="未知 MiMo 音色: "
+        + rest
+        + "，可用: "
+        + ", ".join("mimo-" + v for v in MIMO_VOICES)
+        + " 或 mimo-clone-<样音名>",
+    )
+
+
+def mimo_generate(text: str, spec: tuple[str, object]) -> bytes:
+    """同步调用 MiMo 合成，返回 wav 字节（24kHz）。spec 见 mimo_resolve_voice。"""
+    if not MIMO_API_KEY:
+        raise HTTPException(
+            status_code=503,
+            detail="MiMo 未配置：请在 scripts/.env（或环境变量）设置 MIMO_API_KEY",
+        )
+    kind, val = spec
+    if kind == "clone":
+        model = MIMO_CLONE_MODEL
+        mime = _MIMO_MIME.get(os.path.splitext(val)[1].lower(), "audio/wav")
+        with open(val, "rb") as f:
+            voice_param = f"data:{mime};base64,{base64.b64encode(f.read()).decode('utf-8')}"
+    else:
+        model = MIMO_TTS_MODEL
+        voice_param = val
+    completion = _mimo_client().chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "user", "content": ""},  # 风格指令，留空贴合音色默认风格
+            {"role": "assistant", "content": text.strip()},  # 待合成文本（官方约定）
+        ],
+        audio={"format": "wav", "voice": voice_param},
+    )
+    return base64.b64decode(completion.choices[0].message.audio.data)
+
+
+# ---------------------------------------------------------------------------
 # VibeVoice 引擎（本地 1.5B 大模型 TTS + 零样本克隆）
 # ZOO-833（2026-09-22）子进程化：生成在 vv_worker.py 独立进程中进行，
 # 本进程不 import torch（常驻 ~80MB）；worker 空闲自动退出，内存随进程全额归还。
 # 文本预处理（标点兼容 + 数字归一化）随模型一并迁入 worker。
 # ---------------------------------------------------------------------------
-VIBEVOICE_DISABLED = os.environ.get("VIBEVOICE_DISABLED") == "1"
-VIBEVOICE_DIR = os.environ.get("VIBEVOICE_DIR", "/Volumes/macext/code/demo/VibeVoice")
-VIBEVOICE_MODEL = os.environ.get("VIBEVOICE_MODEL", "/Volumes/macext/llm-model/models/VibeVoice-1.5B")
-VV_IDLE_UNLOAD_SEC = int(os.environ.get("VV_IDLE_UNLOAD_SEC", "900"))
-VV_REQUEST_TIMEOUT_SEC = float(os.environ.get("VV_REQUEST_TIMEOUT_SEC", "1200"))
 
 # OpenAI 音色名 → VibeVoice 内置音色
 VV_VOICE_MAP = {
@@ -210,6 +373,7 @@ def _vv_worker_proc() -> subprocess.Popen:
         stdout=subprocess.PIPE,
         stderr=None,  # 继承父进程 stderr → 模型加载日志进服务日志
         env={**os.environ, "VIBEVOICE_DIR": VIBEVOICE_DIR, "VIBEVOICE_MODEL": VIBEVOICE_MODEL,
+             "CLONE_VOICE_DIR": CLONE_VOICE_DIR,
              "VV_IDLE_UNLOAD_SEC": str(VV_IDLE_UNLOAD_SEC)},
     )
     _VV_WORKER["proc"] = p

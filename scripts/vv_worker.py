@@ -26,8 +26,21 @@ import time
 
 IDLE_EXIT_SEC = int(os.environ.get("VV_IDLE_UNLOAD_SEC", "900"))
 POLL_SEC = 5
-VIBEVOICE_DIR = os.environ.get("VIBEVOICE_DIR", "/Volumes/macext/code/demo/VibeVoice")
-VIBEVOICE_MODEL = os.environ.get("VIBEVOICE_MODEL", "/Volumes/macext/llm-model/models/VibeVoice-1.5B")
+# 目录默认值按平台区分（与 edge-tts-server.py 保持一致）：macOS 沿用原部署固定路径，
+# 其他平台退回项目相对路径；父进程启动 worker 时会显式传入这些环境变量
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if sys.platform == "darwin":
+    _VV_DIR_DEFAULT = "/Volumes/macext/code/demo/VibeVoice"
+    _VV_MODEL_DEFAULT = "/Volumes/macext/llm-model/models/VibeVoice-1.5B"
+else:
+    _VV_DIR_DEFAULT = os.path.join(PROJECT_ROOT, os.pardir, "VibeVoice")
+    _VV_MODEL_DEFAULT = os.path.join(_VV_DIR_DEFAULT, "VibeVoice-1.5B")
+VIBEVOICE_DIR = os.environ.get("VIBEVOICE_DIR", _VV_DIR_DEFAULT)
+VIBEVOICE_MODEL = os.environ.get("VIBEVOICE_MODEL", _VV_MODEL_DEFAULT)
+# 克隆样音库（项目内相对目录），与 mimo-clone-<名字> 共用
+CLONE_VOICE_DIR = os.environ.get(
+    "CLONE_VOICE_DIR", os.path.join(PROJECT_ROOT, "demo", "voices")
+)
 
 # busy 期间绝不自退出（生成中途退出 = 半截输出）；last_active 由主循环维护
 _STATE = {"busy": False, "last_active": time.time()}
@@ -182,7 +195,7 @@ def _generate(text: str, voice_wav: str) -> str:
 
 
 def _handle(req: dict) -> dict:
-    voice_wav = os.path.join(VIBEVOICE_DIR, "demo", "voices", f"{req['voice']}.wav")
+    voice_wav = os.path.join(CLONE_VOICE_DIR, f"{req['voice']}.wav")
     if not os.path.isfile(voice_wav):
         return {"id": req.get("id"), "ok": False,
                 "error": f"FileNotFoundError: VibeVoice 音色不存在: {req['voice']}（缺 {voice_wav}）"}

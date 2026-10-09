@@ -1,14 +1,21 @@
-# TTS 双引擎服务说明（edge-tts + VibeVoice）
+# TTS 多引擎服务说明（edge-tts + MiMo + VibeVoice）
 
-`scripts/edge-tts-server.py` 已升级为双引擎 OpenAI 兼容服务，openMAIC 的 `TTS_OPENAI` 通道（`TTS_OPENAI_BASE_URL=http://127.0.0.1:8500/v1`）零改动即可使用全部音色。
+`scripts/edge-tts-server.py` 已升级为多引擎 OpenAI 兼容服务，openMAIC 的 `TTS_OPENAI` 通道（`TTS_OPENAI_BASE_URL=http://127.0.0.1:8500/v1`）零改动即可使用全部音色。
 
 ## 启动
 
 ```bash
-# 必须用 VibeVoice 的 venv（两引擎依赖合一）
-/Volumes/macext/code/demo/VibeVoice/venv/bin/python scripts/edge-tts-server.py
-# 环境变量：PORT（默认8500）/ VIBEVOICE_DIR / VIBEVOICE_MODEL / VIBEVOICE_DISABLED=1（纯edge模式）
+# Windows：双击 scripts\edge-tts-start.bat（优先用 scriptsenv 独立环境，无则回退系统 python）
+# 手动启动（Windows，用本目录独立 venv，fastapi/edge-tts/openai 依赖都在里面）：
+scripts/venv/Scripts/python.exe scripts/edge-tts-server.py
+
+# Mac/Linux（VibeVoice 引擎需要，路径按机器实际位置调整）：
+/path/to/VibeVoice/venv/bin/python scripts/edge-tts-server.py
+# 环境变量：PORT（默认8500）/ VIBEVOICE_DIR / VIBEVOICE_MODEL / VIBEVOICE_DISABLED=1（纯edge+mimo模式）
 #          VV_IDLE_UNLOAD_SEC（默认900，vv worker 空闲多少秒自动退出）/ VV_REQUEST_TIMEOUT_SEC（默认1200）
+# VibeVoice 路径默认值按平台区分：macOS 自动沿用原部署固定路径（/Volumes/macext/...，原环境免配置），
+# 其他平台默认项目相对路径（<项目根>/../VibeVoice），均可覆盖
+# MiMo 配置写在本目录 .env（MIMO_API_KEY / CLONE_VOICE_DIR），真实环境变量优先
 ```
 
 ## 音色路由（按 voice 名自动分发）
@@ -30,10 +37,26 @@
 
 **内存模型（ZOO-833，2026-09-22 子进程化）**：生成在独立 worker 进程（`vv_worker.py`）中进行，服务主进程只做路由（~58MB，不加载 torch）；worker 加载模型后 ~6.9GB，**空闲 15 分钟（`VV_IDLE_UNLOAD_SEC`）自动退出**，内存随进程全额归还。worker 意外死亡不致命：该次请求 500，下一次请求自动重拉。**监控口径**：MPS 内存不计入 `ps` RSS（会显示成几 MB 的假象），查占用用 `footprint <pid>`；`/health` 的 `worker_running`/`worker_pid` 字段反映 worker 状态。
 
+### MiMo 引擎（小米 MiMo 在线 API，2026-10-09 接入）
+
+文档：https://mimo.mi.com/docs/zh-CN/quick-start/usage-guide/audio/speech-synthesis-v2.5
+
+| voice 名 | 音色 | 说明 |
+|----------|------|------|
+| `mimo-冰糖` / `mimo-茉莉` / `mimo-苏打` / `mimo-白桦` | 预置中文音色 | 冰糖/茉莉女声，苏打/白桦男声 |
+| `mimo-Mia` / `mimo-Chloe` / `mimo-Milo` / `mimo-Dean` | 预置英文音色 | Mia/Chloe 女声，Milo/Dean 男声 |
+| `mimo-clone-<样音名>` | 音色克隆 | 样音与 VibeVoice 克隆音色共用项目内目录 `demo/voices`：放 `<样音名>.wav`（5-10s 清晰人声，也支持 mp3/m4a/flac），即 `vv-<样音名>` 和 `mimo-clone-<样音名>` 用的是同一份样音 |
+
+配置（写 `scripts/.env`，已被 .gitignore 忽略；真实环境变量优先）：
+- `MIMO_API_KEY`：MiMo API Key，未配置时仅 `mimo-*` 请求报 503，不影响其他引擎
+- `CLONE_VOICE_DIR`：克隆样音库目录，默认项目内相对路径 `demo/voices`（一般无需设置）
+
+特点：在线 API 无需本地 GPU、响应快（秒级）、24kHz 输出自动转 mp3/wav。忽略 speed 参数。
+
 ## 扩展：加入自己克隆的音色
 
 1. 准备 5-10 秒清晰人声样音（单人、无 BGM），命名 `名字.wav`
-2. 放入 `/Volumes/macext/code/demo/VibeVoice/demo/voices/`
+2. 放入项目内 `demo/voices/`（相对 OpenMAIC 根目录，`vv-` 与 `mimo-clone-` 共用）
 3. 之后 `voice: "vv-名字"` 即可用该音色生成（零样本克隆，无需训练）
 
 详细克隆指南：VibeVoice 仓库 `VOICES-ZH.md`（https://gitee.com/xmx0632/vibe-voice）

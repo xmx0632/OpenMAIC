@@ -99,3 +99,7 @@ zoo456-logs/
 # Python bytecode cache (TTS server runtime junk)
 scripts/__pycache__/
 __pycache__/
+
+# local TTS server isolated venv
+scripts/venv/
+demo/tts-output/*.mp3
